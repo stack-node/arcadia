@@ -26,6 +26,15 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install Linux GUI build dependencies
+        if: runner.os == 'Linux' && matrix.feature == 'gui'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxcb1-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev
+
       - name: Build Arcadia
         run: cargo build -p arcadia --no-default-features --features ${{ matrix.feature }}
 
