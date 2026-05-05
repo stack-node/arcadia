@@ -1,0 +1,16 @@
+[package]
+name = "arcadia"
+version = "0.1.0"
+edition = "2021"
+description = "Arcadia launcher base application"
+license = "MIT"
+
+[features]
+default = ["headless"]
+headless = []
+gui = ["dep:gpui"]
+
+[dependencies]
+gpui = { version = "0.2.2", optional = true }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
