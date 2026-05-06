@@ -11,6 +11,6 @@ headless = []
 gui = ["dep:gpui"]
 
 [dependencies]
-gpui = { version = "0.2.2", optional = true }
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+arcadia-core = { path = "../Shared/ArcadiaCore" }
+gpui         = { version = "0.2.2", optional = true }
+rustyline    = "18.0.0"

@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::io;
 
-use crate::config::{config_file_path, config_root_dir};
+use crate::config::ConfigFile;
 
 const FILE_NAME: &str = "commandline.toml";
 
@@ -12,6 +10,8 @@ pub struct CommandlineConfig {
     pub output_symbol: String,
     pub input_color: String,
     pub output_color: String,
+    #[serde(default = "default_clear_on_start")]
+    pub clear_on_start: bool,
 }
 
 impl Default for CommandlineConfig {
@@ -21,28 +21,18 @@ impl Default for CommandlineConfig {
             output_symbol: "~".to_string(),
             input_color: "magenta".to_string(),
             output_color: "cyan".to_string(),
+            clear_on_start: default_clear_on_start(),
         }
     }
 }
 
-impl CommandlineConfig {
-    pub fn load_or_create() -> io::Result<Self> {
-        let root = config_root_dir()?;
-        fs::create_dir_all(&root)?;
-
-        let path = config_file_path(FILE_NAME)?;
-
-        if !path.exists() {
-            let default = Self::default();
-            let content = toml::to_string_pretty(&default).map_err(io::Error::other)?;
-            fs::write(&path, content)?;
-            return Ok(default);
-        }
-
-        let content = fs::read_to_string(&path)?;
-        toml::from_str::<Self>(&content).map_err(io::Error::other)
+impl ConfigFile for CommandlineConfig {
+    fn file_name() -> &'static str {
+        FILE_NAME
     }
+}
 
+impl CommandlineConfig {
     pub fn input_ansi_code(&self) -> &'static str {
         color_to_ansi(&self.input_color)
     }
@@ -50,6 +40,34 @@ impl CommandlineConfig {
     pub fn output_ansi_code(&self) -> &'static str {
         color_to_ansi(&self.output_color)
     }
+
+    pub fn color_warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if !is_known_color(&self.input_color) {
+            warnings.push(format!(
+                "Unknown input_color '{}'; valid: black red green yellow blue magenta cyan white",
+                self.input_color
+            ));
+        }
+        if !is_known_color(&self.output_color) {
+            warnings.push(format!(
+                "Unknown output_color '{}'; valid: black red green yellow blue magenta cyan white",
+                self.output_color
+            ));
+        }
+        warnings
+    }
+}
+
+fn default_clear_on_start() -> bool {
+    true
+}
+
+fn is_known_color(color: &str) -> bool {
+    matches!(
+        color.trim().to_ascii_lowercase().as_str(),
+        "black" | "red" | "green" | "yellow" | "blue" | "magenta" | "cyan" | "white"
+    )
 }
 
 fn color_to_ansi(color: &str) -> &'static str {
