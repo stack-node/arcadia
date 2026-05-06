@@ -7,8 +7,7 @@ struct SidebarView: View {
     let registry: NavigationRegistry
     let sidebarWidth: CGFloat
     let sidebarSwipeThreshold: CGFloat
-    let shellEnabled: Bool
-    let netEnabled: Bool
+    let isPageVisible: (String) -> Bool
     let remoteSessionEnabled: Bool
 
     @Binding var activeGroupID: String
@@ -32,17 +31,6 @@ struct SidebarView: View {
             .compactMap { id in registry.pages.first(where: { $0.id == id }) }
     }
 
-    private func isPageVisible(_ pageID: String) -> Bool {
-        switch pageID {
-        case "utility.shell":
-            return shellEnabled
-        case "network.overview":
-            return netEnabled
-        default:
-            return true
-        }
-    }
-
     private func selectGroup(_ groupID: String) {
         activeGroupID = groupID
         if let group = visibleGroups.first(where: { $0.id == groupID }),
@@ -54,27 +42,29 @@ struct SidebarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Arcadia")
-                    .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(theme.primaryTextColor)
+                HStack(alignment: .center, spacing: 10) {
+                    Text("Arcadia")
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .foregroundStyle(theme.primaryTextColor)
 
-                if remoteSessionEnabled {
-                    Menu {
-                        Button("local") {}
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text("local")
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: 10, weight: .semibold))
-                        }
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(theme.secondaryTextColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(theme.cardFillColor, in: Capsule())
-                        .overlay {
-                            Capsule()
-                                .stroke(theme.cardStrokeColor, lineWidth: 1)
+                    if remoteSessionEnabled {
+                        Menu {
+                            Button("local") {}
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text("local")
+                                Image(systemName: "chevron.down")
+                                    .font(.system(size: 7, weight: .bold))
+                            }
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(theme.secondaryTextColor)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background(theme.cardFillColor, in: Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(theme.cardStrokeColor, lineWidth: 1)
+                            }
                         }
                     }
                 }
@@ -95,27 +85,7 @@ struct SidebarView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(visibleGroups) { group in
-                        Button {
-                            selectGroup(group.id)
-                        } label: {
-                            VStack(spacing: 6) {
-                                Image(systemName: group.systemImage)
-                                    .font(.system(size: 14, weight: .semibold))
-                                Text(group.label)
-                            }
-                            .font(.caption.weight(activeGroupID == group.id ? .semibold : .medium))
-                            .foregroundStyle(activeGroupID == group.id ? theme.selectedTextColor : theme.secondaryTextColor)
-                            .frame(width: 64, height: 64)
-                            .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .fill(activeGroupID == group.id ? theme.selectedFillColor : .clear)
-                            )
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                    .stroke(activeGroupID == group.id ? theme.selectedStrokeColor : .clear, lineWidth: 1)
-                            }
-                        }
-                        .buttonStyle(.plain)
+                        groupTabButton(group: group)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -142,7 +112,7 @@ struct SidebarView: View {
                 .foregroundStyle(theme.tertiaryTextColor)
                 .padding(.horizontal, 16)
 
-            ForEach(registry.globalPages, id: \.self) { pageID in
+            ForEach(registry.globalPages.filter { isPageVisible($0) }, id: \.self) { pageID in
                 if let page = registry.pages.first(where: { $0.id == pageID }) {
                     pageButton(page: page)
                 }
@@ -161,8 +131,35 @@ struct SidebarView: View {
         .ignoresSafeArea()
     }
 
+    private func groupTabButton(group: GroupDefinition) -> some View {
+        let pal = theme.navAccentPalette(group.accent)
+        let active = activeGroupID == group.id
+        return Button {
+            selectGroup(group.id)
+        } label: {
+            VStack(spacing: 6) {
+                Image(systemName: group.systemImage)
+                    .font(.system(size: 14, weight: .semibold))
+                Text(group.label)
+            }
+            .font(.caption.weight(active ? .semibold : .medium))
+            .foregroundStyle(active ? pal.iconActive : theme.primaryTextColor)
+            .frame(width: 64, height: 64)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(active ? pal.selectedFill : .clear)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(active ? pal.iconActive.opacity(0.42) : .clear, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
     private func pageButton(page: PageDefinition) -> some View {
         let isActive = activePageID == page.id
+        let pal = theme.navAccentPalette(page.accent)
         return Button {
             activePageID = page.id
         } label: {
@@ -174,16 +171,16 @@ struct SidebarView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.body.weight(isActive ? .semibold : .medium))
-            .foregroundStyle(isActive ? theme.selectedTextColor : theme.secondaryTextColor)
+            .foregroundStyle(isActive ? pal.iconActive : theme.primaryTextColor)
             .padding(.horizontal, 16)
             .frame(height: 50)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(isActive ? theme.selectedFillColor : .clear)
+                    .fill(isActive ? pal.selectedFill : .clear)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(isActive ? theme.selectedStrokeColor : .clear, lineWidth: 1)
+                    .stroke(isActive ? pal.iconActive.opacity(0.38) : .clear, lineWidth: 1)
             }
         }
         .buttonStyle(.plain)

@@ -8,9 +8,11 @@ license = "MIT"
 [features]
 default = ["headless"]
 headless = []
-gui = ["dep:gpui"]
+gui = ["dep:gpui", "dep:portable-pty", "dep:vt100"]
 
 [dependencies]
 arcadia-core = { path = "../Shared/ArcadiaCore" }
 gpui         = { version = "0.2.2", optional = true }
 rustyline    = "18.0.0"
+portable-pty = { version = "0.8", optional = true }
+vt100        = { version = "0.15", optional = true }

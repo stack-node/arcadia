@@ -141,13 +141,7 @@ pub fn handle_internal(input: &str) -> String {
         *capture.borrow_mut() = Some(Vec::new());
     });
     let _ = handle(input);
-    RESPONSE_CAPTURE.with(|capture| {
-        capture
-            .borrow_mut()
-            .take()
-            .unwrap_or_default()
-            .join("\n")
-    })
+    RESPONSE_CAPTURE.with(|capture| capture.borrow_mut().take().unwrap_or_default().join("\n"))
 }
 
 fn handle_with(input: &str, mut respond: impl FnMut(&str)) -> CommandResult {
@@ -241,9 +235,11 @@ fn help_lines() -> Vec<String> {
             "ping" => lines.push("- ping: respond with pong".to_string()),
             "quit" => lines.push("- quit: exit Arcadia".to_string()),
             "configuration" => {
-                lines.push("- configuration <name>: open config file in default editor".to_string());
+                lines
+                    .push("- configuration <name>: open config file in default editor".to_string());
                 lines.push(
-                    "- configuration [show|get|set|reset] ...: manage commandline config".to_string(),
+                    "- configuration [show|get|set|reset] ...: manage commandline config"
+                        .to_string(),
                 );
                 if !spec.aliases.is_empty() {
                     let aliases = spec.aliases.join(" -> ");

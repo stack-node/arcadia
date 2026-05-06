@@ -18,6 +18,12 @@
 		A00000000000000000000093 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000083 /* SidebarView.swift */; };
 		A00000000000000000000094 /* ShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000084 /* ShellView.swift */; };
 		A00000000000000000000095 /* ModulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000085 /* ModulesView.swift */; };
+		A00000000000000000000096 /* ContentView+Layout.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000086 /* ContentView+Layout.swift */; };
+		A00000000000000000000097 /* ContentView+NavigationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000087 /* ContentView+NavigationState.swift */; };
+		A00000000000000000000098 /* ContentView+Actions.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000088 /* ContentView+Actions.swift */; };
+		A00000000000000000000099 /* ContentView+Registry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000089 /* ContentView+Registry.swift */; };
+		A00000000000000000000101 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000100 /* SplashView.swift */; };
+		A00000000000000000000103 /* ModuleNames.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000102 /* ModuleNames.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +40,12 @@
 		A00000000000000000000083 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
 		A00000000000000000000084 /* ShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellView.swift; sourceTree = "<group>"; };
 		A00000000000000000000085 /* ModulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModulesView.swift; sourceTree = "<group>"; };
+		A00000000000000000000086 /* ContentView+Layout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Layout.swift"; sourceTree = "<group>"; };
+		A00000000000000000000087 /* ContentView+NavigationState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+NavigationState.swift"; sourceTree = "<group>"; };
+		A00000000000000000000088 /* ContentView+Actions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Actions.swift"; sourceTree = "<group>"; };
+		A00000000000000000000089 /* ContentView+Registry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ContentView+Registry.swift"; sourceTree = "<group>"; };
+		A00000000000000000000100 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
+		A00000000000000000000102 /* ModuleNames.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModuleNames.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,6 +73,12 @@
 			children = (
 				A00000000000000000000001 /* ArcadiaApp.swift */,
 				A00000000000000000000002 /* ContentView.swift */,
+				A00000000000000000000086 /* ContentView+Layout.swift */,
+				A00000000000000000000087 /* ContentView+NavigationState.swift */,
+				A00000000000000000000088 /* ContentView+Actions.swift */,
+				A00000000000000000000089 /* ContentView+Registry.swift */,
+				A00000000000000000000100 /* SplashView.swift */,
+				A00000000000000000000102 /* ModuleNames.swift */,
 				A00000000000000000000080 /* NavigationModels.swift */,
 				A00000000000000000000081 /* AppTheme.swift */,
 				A00000000000000000000082 /* GlassComponents.swift */,
@@ -163,6 +181,12 @@
 			files = (
 				A00000000000000000000010 /* ArcadiaApp.swift in Sources */,
 				A00000000000000000000011 /* ContentView.swift in Sources */,
+				A00000000000000000000096 /* ContentView+Layout.swift in Sources */,
+				A00000000000000000000097 /* ContentView+NavigationState.swift in Sources */,
+				A00000000000000000000098 /* ContentView+Actions.swift in Sources */,
+				A00000000000000000000099 /* ContentView+Registry.swift in Sources */,
+				A00000000000000000000101 /* SplashView.swift in Sources */,
+				A00000000000000000000103 /* ModuleNames.swift in Sources */,
 				A00000000000000000000012 /* arcadia_core.swift in Sources */,
 				A00000000000000000000090 /* NavigationModels.swift in Sources */,
 				A00000000000000000000091 /* AppTheme.swift in Sources */,

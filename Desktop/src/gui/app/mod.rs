@@ -1,0 +1,99 @@
+//! GPUI shell root view — split across `app/` submodules for readability.
+
+mod entry;
+mod lifecycle;
+mod modules_page;
+mod navigation;
+mod root;
+mod shell;
+mod sidebar;
+mod splash;
+
+pub use entry::run;
+
+use gpui::{FocusHandle, ScrollHandle, SharedString};
+
+use super::tui::TuiSession;
+
+/// Top inset so window chrome (macOS traffic lights) does not overlap the first row of UI.
+pub(crate) fn window_controls_top_padding(window: &gpui::Window) -> gpui::Pixels {
+    #[cfg(target_os = "macos")]
+    {
+        use gpui::px;
+        if window.is_fullscreen() {
+            px(0.)
+        } else {
+            (window.rem_size() * 2.25).max(px(28.))
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        gpui::px(0.)
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum ShellMode {
+    Generic,
+    Internal,
+}
+
+impl ShellMode {
+    pub(super) fn toggle(self) -> Self {
+        match self {
+            ShellMode::Generic => ShellMode::Internal,
+            ShellMode::Internal => ShellMode::Generic,
+        }
+    }
+
+    pub(super) fn label(self) -> &'static str {
+        match self {
+            ShellMode::Generic => "system",
+            ShellMode::Internal => "internal",
+        }
+    }
+
+    pub(super) fn command_token(self) -> &'static str {
+        match self {
+            ShellMode::Generic => "shell.execute",
+            ShellMode::Internal => "shell.internal",
+        }
+    }
+}
+
+pub struct ArcadiaRoot {
+    pub title: SharedString,
+    pub active_page_id: &'static str,
+    pub active_group_id: &'static str,
+    pub module_rows: Vec<(String, bool)>,
+    pub pending_module_enable: Option<(String, Vec<String>)>,
+    pub shell_history: Vec<String>,
+    pub shell_input: String,
+    pub shell_focus: FocusHandle,
+    pub shell_cursor: usize,
+    pub shell_command_history: Vec<String>,
+    pub shell_history_index: Option<usize>,
+    pub shell_caret_visible: bool,
+    pub shell_caret_task_started: bool,
+    pub shell_stream_nonce: u64,
+    pub shell_output_scroll: ScrollHandle,
+    pub shell_mode: ShellMode,
+    pub tui_session: Option<TuiSession>,
+    pub tui_nonce: u64,
+    pub tui_ready: bool,
+    pub splash_elapsed_ms: f32,
+    pub splash_tick_started: bool,
+    pub sidebar_visible: bool,
+    pub app_menu_open: bool,
+}
+
+impl ArcadiaRoot {
+    pub(crate) fn is_module_enabled(&self, name: &str) -> bool {
+        self.module_rows
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, enabled)| *enabled)
+            .unwrap_or(false)
+    }
+}

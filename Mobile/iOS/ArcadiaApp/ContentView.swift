@@ -2,26 +2,26 @@ import SwiftUI
 import UIKit
 
 struct ContentView: View {
-    @Environment(\.colorScheme) private var colorScheme
-    private var theme: AppTheme { AppTheme(isDark: colorScheme == .dark) }
+    @Environment(\.colorScheme) var colorScheme
+    var theme: AppTheme { AppTheme(isDark: colorScheme == .dark) }
 
-    private let sidebarWidth: CGFloat = 292
-    private let sidebarSwipeThreshold: CGFloat = 80
+    let sidebarWidth: CGFloat = 292
+    let sidebarSwipeThreshold: CGFloat = 80
 
-    private let registry: NavigationRegistry
+    let registry: NavigationRegistry
 
-    @State private var showSplash = true
-    @State private var isSidebarOpen = true
-    @State private var activeGroupID: String
-    @State private var activePageID: String
-    @State private var sidebarDragOffset: CGFloat = 0
-    @State private var modules: [ModuleStatus] = []
-    @State private var pendingModuleEnable: (name: String, probe: ModuleToggleResult)?
-    @State private var showRequirementsPrompt = false
-    @State private var shellCommandInput = ""
-    @State private var shellHistory: [String] = ["Arcadia Terminal ready."]
-    @State private var moduleToggleTask: Task<Void, Never>?
-    @State private var moduleErrorMessage: String?
+    @State var showSplash = true
+    @State var isSidebarOpen = true
+    @State var activeGroupID: String
+    @State var activePageID: String
+    @State var sidebarDragOffset: CGFloat = 0
+    @State var modules: [ModuleStatus] = []
+    @State var pendingModuleEnable: (name: String, probe: ModuleToggleResult)?
+    @State var showRequirementsPrompt = false
+    @State var shellCommandInput = ""
+    @State var shellHistory: [String] = ["Arcadia Terminal ready."]
+    @State var moduleToggleTask: Task<Void, Never>?
+    @State var moduleErrorMessage: String?
 
     init() {
         let loadedRegistry = Self.loadNavigationRegistry()
@@ -55,9 +55,8 @@ struct ContentView: View {
                 registry: registry,
                 sidebarWidth: sidebarWidth,
                 sidebarSwipeThreshold: sidebarSwipeThreshold,
-                shellEnabled: shellEnabled,
-                netEnabled: netEnabled,
-                remoteSessionEnabled: remoteSessionEnabled,
+                isPageVisible: { pageID in self.isPageVisible(pageID) },
+                remoteSessionEnabled: isModuleEnabled(ModuleNames.remoteSession),
                 activeGroupID: $activeGroupID,
                 activePageID: $activePageID
             )
@@ -87,9 +86,6 @@ struct ContentView: View {
         .onChange(of: isSidebarOpen) { open in
             if open { dismissKeyboard() }
         }
-        .onChange(of: activePageID) { pageID in
-            if pageID == "global.modules" { reloadModules() }
-        }
         .alert("Enable with requirements?", isPresented: $showRequirementsPrompt, presenting: pendingModuleEnable) { pending in
             Button("Cancel", role: .cancel) { pendingModuleEnable = nil }
             Button("Enable") {
@@ -111,348 +107,5 @@ struct ContentView: View {
         } message: {
             Text(moduleErrorMessage ?? "")
         }
-    }
-
-    // MARK: - Sidebar geometry
-
-    private var sidebarOffset: CGFloat {
-        isSidebarOpen
-            ? min(0, sidebarDragOffset)
-            : max(-sidebarWidth, -sidebarWidth + max(0, sidebarDragOffset))
-    }
-
-    private var closeSidebarGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                guard isSidebarOpen else { return }
-                sidebarDragOffset = min(0, value.translation.width)
-            }
-            .onEnded { value in
-                guard isSidebarOpen else { return }
-                let closing = value.translation.width < -sidebarSwipeThreshold
-                    || value.predictedEndTranslation.width < -sidebarSwipeThreshold
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-                    isSidebarOpen = !closing
-                    sidebarDragOffset = 0
-                }
-            }
-    }
-
-    private var openSidebarGesture: some Gesture {
-        DragGesture(minimumDistance: 12)
-            .onChanged { value in
-                guard !isSidebarOpen else { return }
-                sidebarDragOffset = max(0, value.translation.width)
-            }
-            .onEnded { value in
-                guard !isSidebarOpen else { return }
-                let opening = value.translation.width > sidebarSwipeThreshold
-                    || value.predictedEndTranslation.width > sidebarSwipeThreshold
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-                    isSidebarOpen = opening
-                    sidebarDragOffset = 0
-                }
-            }
-    }
-
-    private var edgeSwipeHandle: some View {
-        Rectangle()
-            .fill(.clear)
-            .frame(width: 24)
-            .contentShape(Rectangle())
-            .ignoresSafeArea()
-            .gesture(openSidebarGesture)
-    }
-
-    // MARK: - Navigation state
-
-    private var shellEnabled: Bool {
-        modules.first(where: { $0.name == "shell" })?.enabled ?? false
-    }
-
-    private var remoteSessionEnabled: Bool {
-        modules.first(where: { $0.name == "remote-session" })?.enabled ?? false
-    }
-
-    private var netEnabled: Bool {
-        modules.first(where: { $0.name == "net" })?.enabled ?? false
-    }
-
-    private func isPageVisible(_ pageID: String) -> Bool {
-        switch pageID {
-        case "utility.shell":
-            return shellEnabled
-        case "network.overview":
-            return netEnabled
-        default:
-            return true
-        }
-    }
-
-    private var activePage: PageDefinition {
-        if isPageVisible(activePageID), let page = registry.pages.first(where: { $0.id == activePageID }) {
-            return page
-        }
-        if let firstVisible = registry.pages.first(where: { isPageVisible($0.id) }) {
-            return firstVisible
-        }
-        return registry.pages[0]
-    }
-
-    // MARK: - Content
-
-    private var mainContent: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 24) {
-                if activePage.id != "utility.shell" {
-                    HStack(alignment: .top) {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(activePage.title)
-                                .font(.system(size: 40, weight: .semibold, design: .rounded))
-                                .foregroundStyle(theme.primaryTextColor)
-
-                            Text(activePage.description)
-                                .font(.body)
-                                .foregroundStyle(theme.secondaryTextColor)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-
-                        Spacer()
-
-                        Image(systemName: activePage.systemImage)
-                            .font(.system(size: 28, weight: .medium))
-                            .foregroundStyle(theme.accentTextColor)
-                            .frame(width: 58, height: 58)
-                            .background(theme.cardFillColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                    .stroke(theme.cardStrokeColor, lineWidth: 1)
-                            }
-                    }
-                }
-
-                contentBody
-
-                Spacer(minLength: 0)
-            }
-            .padding(24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background {
-                RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(theme.cardFillColor)
-                    .background(
-                        RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .fill(.ultraThinMaterial)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .stroke(theme.cardStrokeColor, lineWidth: 1)
-                    }
-                    .shadow(color: theme.contentShadowColor, radius: 40, x: 0, y: 18)
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
-                            isSidebarOpen.toggle()
-                        }
-                    } label: {
-                        Image(systemName: "sidebar.leading")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(theme.accentTextColor)
-                            .frame(width: 52, height: 52)
-                            .background(.ultraThinMaterial, in: Circle())
-                            .overlay {
-                                Circle()
-                                    .fill(colorScheme == .dark ? .white.opacity(0.04) : .white.opacity(0.35))
-                            }
-                            .overlay {
-                                Circle()
-                                    .stroke(theme.cardStrokeColor, lineWidth: 1)
-                            }
-                            .shadow(color: theme.contentShadowColor, radius: 14, x: 0, y: 8)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(isSidebarOpen ? "Close sidebar" : "Open sidebar")
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        activePageID = "global.logs"
-                    } label: {
-                        let isLogsActive = activePageID == "global.logs"
-                        Image(systemName: "doc.text.magnifyingglass")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(isLogsActive ? theme.primaryTextColor : theme.accentTextColor)
-                            .frame(width: 52, height: 52)
-                            .background(
-                                isLogsActive
-                                    ? AnyShapeStyle(theme.cardFillColor)
-                                    : AnyShapeStyle(.ultraThinMaterial),
-                                in: Circle()
-                            )
-                            .overlay {
-                                Circle()
-                                    .fill(
-                                        isLogsActive
-                                            ? (colorScheme == .dark ? .white.opacity(0.08) : .white.opacity(0.45))
-                                            : (colorScheme == .dark ? .white.opacity(0.04) : .white.opacity(0.35))
-                                    )
-                            }
-                            .overlay {
-                                Circle()
-                                    .stroke(
-                                        isLogsActive ? theme.accentTextColor.opacity(0.4) : theme.cardStrokeColor,
-                                        lineWidth: 1
-                                    )
-                            }
-                            .shadow(color: theme.contentShadowColor, radius: 14, x: 0, y: 8)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open logs")
-                }
-            }
-            .toolbarBackground(.hidden, for: .navigationBar)
-        }
-    }
-
-    @ViewBuilder
-    private var contentBody: some View {
-        if activePage.id == "global.modules" {
-            ModulesView(modules: modules, onToggle: updateModule)
-        } else if activePage.id == "utility.shell" {
-            ShellView(shellHistory: $shellHistory, shellCommandInput: $shellCommandInput, onRun: runShellCommand)
-        } else {
-            VStack(spacing: 16) {
-                GlassCard(title: "Primary Surface", subtitle: "This page is rendered from shared page definitions.")
-                HStack(spacing: 16) {
-                    GlassMetric(title: "Sidebar", value: isSidebarOpen ? "Open" : "Closed")
-                    GlassMetric(title: "Selection", value: activePage.title)
-                }
-            }
-        }
-    }
-
-    private var glassBackground: some View {
-        ZStack {
-            if colorScheme == .dark {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.05, green: 0.08, blue: 0.16),
-                        Color(red: 0.07, green: 0.14, blue: 0.25),
-                        Color(red: 0.03, green: 0.06, blue: 0.12)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            } else {
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.95, green: 0.97, blue: 1.0),
-                        Color(red: 0.92, green: 0.96, blue: 0.99),
-                        Color(red: 0.97, green: 0.98, blue: 1.0)
-                    ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-
-            Circle()
-                .fill(colorScheme == .dark ? Color.white.opacity(0.18) : Color.white.opacity(0.6))
-                .frame(width: 320)
-                .blur(radius: 70)
-                .offset(x: -120, y: -250)
-
-            Circle()
-                .fill(colorScheme == .dark ? Color.cyan.opacity(0.16) : Color.cyan.opacity(0.2))
-                .frame(width: 360)
-                .blur(radius: 90)
-                .offset(x: 150, y: -160)
-
-            Circle()
-                .fill(colorScheme == .dark ? Color.blue.opacity(0.22) : Color.blue.opacity(0.16))
-                .frame(width: 380)
-                .blur(radius: 110)
-                .offset(x: 130, y: 260)
-        }
-        .ignoresSafeArea()
-    }
-
-    // MARK: - Actions
-
-    private func reloadModules() {
-        modules = listModules().sorted { $0.name < $1.name }
-    }
-
-    private func updateModule(name: String, enabled: Bool) {
-        moduleToggleTask?.cancel()
-        moduleToggleTask = Task { @MainActor in
-            do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
-            if enabled {
-                let probe = probeModuleToggle(name: name, enabled: true)
-                if !probe.ok && !probe.missingRequirements.isEmpty {
-                    pendingModuleEnable = (name: name, probe: probe)
-                    showRequirementsPrompt = true
-                    reloadModules()
-                    return
-                }
-            }
-            let result = setModuleEnabled(name: name, enabled: enabled)
-            let expected = "Module \(name) \(enabled ? "enabled" : "disabled")"
-            if result != expected {
-                moduleErrorMessage = result
-            }
-            reloadModules()
-        }
-    }
-
-    private func runShellCommand() {
-        let trimmed = shellCommandInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        let args = trimmed.split(separator: " ").map(String.init)
-        shellHistory.append("$ \(trimmed)")
-        let output = executeCommand(
-            token: "shell.execute",
-            args: args,
-            context: ExecutionContextFfi(netAs: nil, netTimeoutMs: nil)
-        )
-        shellHistory.append(contentsOf: output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
-        shellHistory.append("")
-    }
-
-    private func dismissKeyboard() {
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-    }
-
-    // MARK: - Navigation registry
-
-    private static func loadNavigationRegistry() -> NavigationRegistry {
-        let fallback = NavigationRegistry(
-            pages: [
-                PageDefinition(id: "utility.shell", title: "Shell", description: "Run and manage shell utility actions.", glyph: "SH", systemImage: "terminal"),
-                PageDefinition(id: "global.dashboard", title: "Dashboard", description: "Overview of the Arcadia application surface.", glyph: "DH", systemImage: "house"),
-                PageDefinition(id: "global.logs", title: "Logs", description: "Recent logs and activity stream appear here.", glyph: "LG", systemImage: "doc.text.magnifyingglass"),
-                PageDefinition(id: "global.settings", title: "Settings", description: "App preferences and configuration controls appear here.", glyph: "ST", systemImage: "gearshape"),
-                PageDefinition(id: "global.modules", title: "Modules", description: "Manage global module availability and dependency requirements.", glyph: "MD", systemImage: "switch.2"),
-                PageDefinition(id: "network.overview", title: "Overview", description: "Network status and module connectivity overview.", glyph: "NW", systemImage: "network")
-            ],
-            groups: [
-                GroupDefinition(id: "utilities", label: "Utilities", glyph: "UT", systemImage: "wrench.and.screwdriver", pageIDs: ["utility.shell"]),
-                GroupDefinition(id: "network", label: "Network", glyph: "NW", systemImage: "network", pageIDs: ["network.overview"])
-            ],
-            globalPages: ["global.dashboard", "global.settings", "global.modules"],
-            defaultGroup: "utilities",
-            defaultPage: "global.dashboard"
-        )
-
-        let payload = navigationRegistryJson()
-        guard let data = payload.data(using: .utf8),
-              let decoded = try? JSONDecoder().decode(NavigationRegistry.self, from: data),
-              !decoded.pages.isEmpty,
-              !decoded.groups.isEmpty else {
-            return fallback
-        }
-        return decoded
     }
 }

@@ -1,5 +1,7 @@
 use serde::Serialize;
 
+use crate::config::modules::{NET_MODULE_NAME, SHELL_MODULE_NAME};
+
 #[derive(Clone, Copy, Serialize)]
 pub struct NavigationPageDefinition {
     pub id: &'static str,
@@ -7,6 +9,11 @@ pub struct NavigationPageDefinition {
     pub description: &'static str,
     pub glyph: &'static str,
     pub system_image: &'static str,
+    /// Theme key for sidebar-selected fills and icon tint (`Desktop/src/gui/theme.rs`, `AppTheme` on iOS).
+    pub accent: &'static str,
+    /// When set, the page is shown only if this module is enabled (`MODULE_REGISTRY` name).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_module: Option<&'static str>,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -16,6 +23,7 @@ pub struct NavigationGroupDefinition {
     pub glyph: &'static str,
     pub system_image: &'static str,
     pub pages: &'static [&'static str],
+    pub accent: &'static str,
 }
 
 #[derive(Serialize)]
@@ -34,6 +42,8 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         description: "Run and manage shell utility actions.",
         glyph: "terminal",
         system_image: "terminal",
+        accent: "emerald",
+        required_module: Some(SHELL_MODULE_NAME),
     },
     NavigationPageDefinition {
         id: "global.dashboard",
@@ -41,6 +51,8 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         description: "Overview of the Arcadia application surface.",
         glyph: "home",
         system_image: "house",
+        accent: "violet",
+        required_module: None,
     },
     NavigationPageDefinition {
         id: "global.logs",
@@ -48,6 +60,8 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         description: "Recent logs and activity stream appear here.",
         glyph: "logs",
         system_image: "doc.text.magnifyingglass",
+        accent: "sky",
+        required_module: None,
     },
     NavigationPageDefinition {
         id: "global.settings",
@@ -55,6 +69,8 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         description: "App preferences and configuration controls appear here.",
         glyph: "settings",
         system_image: "gearshape",
+        accent: "indigo",
+        required_module: None,
     },
     NavigationPageDefinition {
         id: "global.modules",
@@ -62,6 +78,8 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         description: "Manage global module availability and dependency requirements.",
         glyph: "modules",
         system_image: "switch.2",
+        accent: "fuchsia",
+        required_module: None,
     },
     NavigationPageDefinition {
         id: "network.overview",
@@ -69,6 +87,8 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         description: "Network status and module connectivity overview.",
         glyph: "logs",
         system_image: "network",
+        accent: "teal",
+        required_module: Some(NET_MODULE_NAME),
     },
 ];
 
@@ -79,6 +99,7 @@ pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
         glyph: "tools",
         system_image: "wrench.and.screwdriver",
         pages: &["utility.shell"],
+        accent: "amber",
     },
     NavigationGroupDefinition {
         id: "network",
@@ -86,6 +107,7 @@ pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
         glyph: "logs",
         system_image: "network",
         pages: &["network.overview"],
+        accent: "cyan",
     },
 ];
 

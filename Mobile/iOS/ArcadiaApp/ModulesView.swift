@@ -6,6 +6,7 @@ struct ModulesView: View {
 
     let modules: [ModuleStatus]
     let onToggle: (String, Bool) -> Void
+    let onAppear: () -> Void
 
     var body: some View {
         GlassCard(title: "Global Modules", subtitle: "Enable or disable modules for all surfaces.") {
@@ -31,5 +32,6 @@ struct ModulesView: View {
                 }
             }
         }
+        .onAppear(perform: onAppear)
     }
 }

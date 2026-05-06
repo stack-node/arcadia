@@ -38,7 +38,10 @@ pub static CONFIG_PROVIDERS: &[ConfigProviderSpec] = &[
 ];
 
 pub fn provider_names() -> Vec<String> {
-    CONFIG_PROVIDERS.iter().map(|p| p.name.to_string()).collect()
+    CONFIG_PROVIDERS
+        .iter()
+        .map(|p| p.name.to_string())
+        .collect()
 }
 
 pub fn resolve_provider(name: &str) -> Option<ConfigProviderSpec> {
@@ -366,9 +369,7 @@ pub fn handle_configuration(parts: &[&str]) {
         ["configuration", "show", config_name] => show_config_keys(config_name),
         ["configuration", "get", key] if key.contains('.') => config_get_scoped(key),
         ["configuration", "get", key] => config_get(key),
-        ["configuration", "set", key, value] if key.contains('.') => {
-            config_set_scoped(key, value)
-        }
+        ["configuration", "set", key, value] if key.contains('.') => config_set_scoped(key, value),
         ["configuration", "set", key, value] => config_set(key, value),
         ["configuration", "reset", target] => config_reset_scoped(target),
         ["configuration", "reset"] => config_reset(),

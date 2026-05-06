@@ -6,6 +6,9 @@ struct PageDefinition: Identifiable, Decodable {
     let description: String
     let glyph: String
     let systemImage: String
+    let accent: String
+    /// Module registry name; when set, the page is visible only if that module is enabled.
+    let requiredModule: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -13,6 +16,26 @@ struct PageDefinition: Identifiable, Decodable {
         case description
         case glyph
         case systemImage = "system_image"
+        case accent
+        case requiredModule = "required_module"
+    }
+
+    init(
+        id: String,
+        title: String,
+        description: String,
+        glyph: String,
+        systemImage: String,
+        accent: String,
+        requiredModule: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.description = description
+        self.glyph = glyph
+        self.systemImage = systemImage
+        self.accent = accent
+        self.requiredModule = requiredModule
     }
 }
 
@@ -22,6 +45,7 @@ struct GroupDefinition: Identifiable, Decodable {
     let glyph: String
     let systemImage: String
     let pageIDs: [String]
+    let accent: String
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -29,6 +53,7 @@ struct GroupDefinition: Identifiable, Decodable {
         case glyph
         case systemImage = "system_image"
         case pageIDs = "pages"
+        case accent
     }
 }
 
