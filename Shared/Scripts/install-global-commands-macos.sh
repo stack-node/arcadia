@@ -107,6 +107,11 @@ if [[ ! -f "\${SHARED_BUILD_SCRIPT}" ]]; then
   exit 1
 fi
 
+if ! command -v rg >/dev/null 2>&1; then
+  echo "Error: rg (ripgrep) not found. Install via 'brew install ripgrep' and retry."
+  exit 1
+fi
+
 DESTINATIONS="\$(
   xcodebuild \
     -project "\${PROJECT_PATH}" \

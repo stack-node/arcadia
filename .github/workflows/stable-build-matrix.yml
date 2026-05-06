@@ -49,6 +49,13 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            Desktop -> target
+            Shared/ArcadiaCore -> target
+
       - name: Install Linux GUI build dependencies
         if: runner.os == 'Linux' && matrix.feature == 'gui'
         run: |

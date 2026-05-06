@@ -9,35 +9,47 @@ pub const NET_MODULE_NAME: &str = "net";
 pub const SHELL_MODULE_NAME: &str = "shell";
 const FILE_NAME: &str = "modules.toml";
 
+// Single source of truth for modules. To add a module: one entry here.
+// Format: (module_name, required_deps[])
+static MODULE_REGISTRY: &[(&str, &[&str])] = &[
+    (LAN_MODULE_NAME, &[NET_MODULE_NAME]),
+    (NET_MODULE_NAME, &[]),
+    (SHELL_MODULE_NAME, &[]),
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModulesConfig {
     pub modules: BTreeMap<String, bool>,
 }
 
 fn required_modules(module_name: &str) -> &'static [&'static str] {
-    match module_name {
-        LAN_MODULE_NAME => &[NET_MODULE_NAME],
-        _ => &[],
-    }
+    MODULE_REGISTRY
+        .iter()
+        .find(|(name, _)| *name == module_name)
+        .map(|(_, deps)| *deps)
+        .unwrap_or(&[])
+}
+
+fn is_known_module(module_name: &str) -> bool {
+    MODULE_REGISTRY.iter().any(|(name, _)| *name == module_name)
 }
 
 impl Default for ModulesConfig {
     fn default() -> Self {
-        let mut modules = BTreeMap::new();
-        modules.insert(LAN_MODULE_NAME.to_string(), false);
-        modules.insert(NET_MODULE_NAME.to_string(), false);
-        modules.insert(SHELL_MODULE_NAME.to_string(), false);
+        let modules = MODULE_REGISTRY
+            .iter()
+            .map(|(name, _)| ((*name).to_string(), false))
+            .collect();
         Self { modules }
     }
 }
 
 impl ModulesConfig {
     pub fn required_modules_for(module_name: &str) -> Result<&'static [&'static str], String> {
-        match module_name {
-            LAN_MODULE_NAME | NET_MODULE_NAME | SHELL_MODULE_NAME => {
-                Ok(required_modules(module_name))
-            }
-            _ => Err("Unknown module key".to_string()),
+        if is_known_module(module_name) {
+            Ok(required_modules(module_name))
+        } else {
+            Err("Unknown module key".to_string())
         }
     }
 

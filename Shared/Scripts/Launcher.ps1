@@ -114,6 +114,10 @@ function Invoke-IosDeviceDeploy {
 
     Write-Host ""
     Write-Host "Installing app on device $deviceUdid..."
+    if ($env:ARCADIA_IOS_FORCE_UNINSTALL -eq "1") {
+        Write-Host "Removing existing app (if installed)..."
+        & xcrun devicectl device uninstall app --device $deviceUdid $bundleId 2>$null
+    }
     & xcrun devicectl device install app --device $deviceUdid $appPath
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to install app on device."

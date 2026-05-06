@@ -12,6 +12,9 @@ DEVICE_LIB="${SOURCE_DIR}/target/${DEVICE_TARGET}/release/${LIB_NAME}"
 SIM_LIB="${SOURCE_DIR}/target/${SIM_TARGET}/release/${LIB_NAME}"
 XCFRAMEWORK_DIR="${OUT_DIR}/ArcadiaCore.xcframework"
 BINDGEN_OUT="${OUT_DIR}/Generated"
+DEVICE_DIR=""
+SIM_DIR=""
+trap '[[ -n "${DEVICE_DIR}" ]] && rm -rf "${DEVICE_DIR}"; [[ -n "${SIM_DIR}" ]] && rm -rf "${SIM_DIR}"' EXIT
 
 # ── 0. Install targets ────────────────────────────────────────────────────────
 echo "==> Installing Rust targets"

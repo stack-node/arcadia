@@ -12,6 +12,12 @@
 		A00000000000000000000012 /* arcadia_core.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000005 /* arcadia_core.swift */; };
 		A00000000000000000000013 /* ArcadiaCore.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* ArcadiaCore.xcframework */; };
 		A00000000000000000000014 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* Assets.xcassets */; };
+		A00000000000000000000090 /* NavigationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000080 /* NavigationModels.swift */; };
+		A00000000000000000000091 /* AppTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000081 /* AppTheme.swift */; };
+		A00000000000000000000092 /* GlassComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000082 /* GlassComponents.swift */; };
+		A00000000000000000000093 /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000083 /* SidebarView.swift */; };
+		A00000000000000000000094 /* ShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000084 /* ShellView.swift */; };
+		A00000000000000000000095 /* ModulesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000085 /* ModulesView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -22,6 +28,12 @@
 		A00000000000000000000005 /* arcadia_core.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcadiaCore/Generated/arcadia_core.swift; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000006 /* ArcadiaCore.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; path = ArcadiaCore/ArcadiaCore.xcframework; sourceTree = SOURCE_ROOT; };
 		A00000000000000000000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A00000000000000000000080 /* NavigationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NavigationModels.swift; sourceTree = "<group>"; };
+		A00000000000000000000081 /* AppTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppTheme.swift; sourceTree = "<group>"; };
+		A00000000000000000000082 /* GlassComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassComponents.swift; sourceTree = "<group>"; };
+		A00000000000000000000083 /* SidebarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarView.swift; sourceTree = "<group>"; };
+		A00000000000000000000084 /* ShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellView.swift; sourceTree = "<group>"; };
+		A00000000000000000000085 /* ModulesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModulesView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,6 +61,12 @@
 			children = (
 				A00000000000000000000001 /* ArcadiaApp.swift */,
 				A00000000000000000000002 /* ContentView.swift */,
+				A00000000000000000000080 /* NavigationModels.swift */,
+				A00000000000000000000081 /* AppTheme.swift */,
+				A00000000000000000000082 /* GlassComponents.swift */,
+				A00000000000000000000083 /* SidebarView.swift */,
+				A00000000000000000000084 /* ShellView.swift */,
+				A00000000000000000000085 /* ModulesView.swift */,
 				A00000000000000000000004 /* Info.plist */,
 				A00000000000000000000007 /* Assets.xcassets */,
 				A00000000000000000000033 /* ArcadiaCore */,
@@ -146,6 +164,12 @@
 				A00000000000000000000010 /* ArcadiaApp.swift in Sources */,
 				A00000000000000000000011 /* ContentView.swift in Sources */,
 				A00000000000000000000012 /* arcadia_core.swift in Sources */,
+				A00000000000000000000090 /* NavigationModels.swift in Sources */,
+				A00000000000000000000091 /* AppTheme.swift in Sources */,
+				A00000000000000000000092 /* GlassComponents.swift in Sources */,
+				A00000000000000000000093 /* SidebarView.swift in Sources */,
+				A00000000000000000000094 /* ShellView.swift in Sources */,
+				A00000000000000000000095 /* ModulesView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -2,8 +2,6 @@
 **/*.rs.bk
 /Models/
 /Configuration/
-/Desktop/target/
-/Shared/target/
 /Mobile/iOS/.xcode/
 **/xcuserdata/
 .DS_Store

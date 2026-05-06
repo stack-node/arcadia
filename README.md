@@ -1,186 +1,247 @@
 # Arcadia
 
-Arcadia is a multi-platform runtime and shell that shares one Rust core across desktop and iOS.
-It currently ships as:
+Arcadia is a multi-platform runtime and shell that shares one Rust core across desktop and iOS. It ships as:
 
-- a desktop app (`headless` CLI or `gui` via GPUI),
-- an iOS app (SwiftUI shell backed by UniFFI bindings),
-- shared scripts to build, launch, and deploy consistently.
+- a desktop app — headless CLI or GPU-accelerated GUI via GPUI,
+- an iOS app — SwiftUI shell backed by UniFFI bindings to the Rust core,
+- shared scripts for building, launching, and deploying consistently across platforms.
 
 ## Repository Layout
 
-- `Desktop/` Rust desktop application crate (`arcadia`)
-- `Shared/ArcadiaCore/` shared Rust core crate (`arcadia-core`)
-- `Shared/Tools/uniffi-bindgen/` local UniFFI Swift binding generator wrapper
-- `Shared/Scripts/` launcher + build + install helper scripts
-- `Mobile/iOS/ArcadiaApp/` SwiftUI iOS shell application
-- `Mobile/iOS/ArcadiaCore/` generated Swift bindings + `ArcadiaCore.xcframework`
-- `Resources/` shared non-code assets
-- `build/` local build/deploy outputs
+```
+Desktop/                        Rust desktop crate (arcadia)
+  src/
+    main.rs                     entry point (~30 lines)
+    cli/                        interactive CLI shell
+      mod.rs                    REPL loop, command dispatch, settings
+      args.rs                   command specs, flag parsing, execution context
+      completion.rs             rustyline completer + hinter + highlighter
+      config_cmds.rs            configuration get/set/reset handlers
+      module_cmds.rs            module enable/disable handlers
+    gui/                        GPUI desktop shell
+      app.rs                    ArcadiaRoot view, shell panel, module panel
+      theme.rs                  glyph rendering helpers
+
+Shared/
+  ArcadiaCore/                  Rust core library (arcadia-core)
+    src/
+      lib.rs                    crate root
+      ffi.rs                    UniFFI exports (iOS + future bindings)
+      navigation.rs             shared navigation registry, JSON serialization
+      config/
+        mod.rs                  ConfigFile trait, path resolution
+        modules.rs              module states, dependency graph (MODULE_REGISTRY)
+      modules/
+        mod.rs                  command routing, ExecutionContext, load/shutdown
+        lan/                    LAN module (peer discovery + remote execution)
+          mod.rs                public API, ModuleCommand entries
+          protocol.rs           constants, buffer sizes, PeerStatus, PeerRecord
+          config.rs             LanNodeConfig, node approval helpers
+          peers.rs              NodeState, peer state machine
+          discovery.rs          UDP multicast, service lifecycle
+          handlers.rs           node pair/connect/accept/reject/alias/save/auto
+        net.rs                  net module stub
+        shell.rs                shell.execute command
+      platform/                 platform detection
+  Scripts/
+    Launcher.sh                 interactive launcher menu (bash)
+    Launcher.ps1                interactive launcher menu (PowerShell)
+    build-ios-framework.sh      builds xcframework + Swift bindings
+    install-global-commands-macos.sh  installs arcadia / arcadia-gui / arcadia-ios
+
+Mobile/
+  iOS/
+    ArcadiaApp/                 SwiftUI iOS shell
+      ArcadiaApp.swift          @main entry, config root bootstrap
+      ContentView.swift         top-level coordinator view (~370 lines)
+      NavigationModels.swift    PageDefinition, GroupDefinition, NavigationRegistry
+      AppTheme.swift            AppTheme struct — all color computed properties
+      GlassComponents.swift     GlassCard<Content>, GlassMetric view structs
+      SidebarView.swift         sidebar panel, group/page selection, gestures
+      ShellView.swift           terminal UI — history, input, run button
+      ModulesView.swift         module toggle rows
+    ArcadiaCore/                generated Swift bindings + xcframework (gitignored)
+
+Resources/                      shared non-code assets
+```
 
 ## Architecture
 
-### 1) Shared core (`arcadia-core`)
+### Shared core (`arcadia-core`)
 
-`arcadia-core` is the source of truth for:
+Single source of truth for:
 
-- module configuration and dependency rules,
-- command routing and execution context,
-- LAN discovery + node pairing + remote command execution,
-- FFI APIs consumed by iOS and desktop surfaces,
-- shared navigation registry JSON used by multiple shells.
+- **Module registry** — `MODULE_REGISTRY` const table defines all modules and their dependency graph. Adding a module is one entry.
+- **Command routing** — `execute_command(token, args, context)` dispatches `module.command` tokens to the right handler, with optional `--net:as lan:<target>` remote routing.
+- **LAN networking** — UDP multicast peer discovery, node pairing and approval flows, remote command execution with timeout handling.
+- **Navigation registry** — shared page/group definitions serialized as JSON and consumed by all shells.
+- **UniFFI FFI layer** — type-safe Rust → Swift bridge; iOS calls the same logic desktop uses.
 
-The core exports UniFFI records/functions for:
+### Desktop shell (`Desktop/`)
 
-- listing modules and commands,
-- toggling modules (with and without dependency auto-enable),
-- probing module toggle requirements before applying,
-- executing commands (local or routed via `--net:as lan:<target>`),
-- starting/stopping LAN service,
-- loading shared navigation definitions.
+Two build features, one binary:
 
-### 2) Desktop shell (`Desktop/`)
+| Feature | Mode |
+|---------|------|
+| `headless` | Interactive rustyline CLI with tab completion, history, config commands |
+| `gui` | GPUI window with sidebar navigation, module panel, embedded terminal |
 
-The desktop crate supports two features:
+Both share the same `cli/` module; GUI spawns a background CLI thread alongside the GPUI window.
 
-- `headless` (default) - interactive CLI shell
-- `gui` - GPUI-based shell with sidebar navigation and module controls
+### iOS shell (`Mobile/iOS/`)
 
-Both shells call into `arcadia-core`, so command semantics are shared.
+SwiftUI shell driven entirely through UniFFI bindings:
 
-### 3) iOS shell (`Mobile/iOS/`)
-
-The iOS app initializes a dedicated app-support configuration root and passes it into core FFI on startup.
-SwiftUI uses shared navigation registry payloads from core and drives module/command interactions through generated UniFFI bindings.
+- On launch, sets the config root to the iOS app support container.
+- Decodes navigation registry JSON from core to build sidebar/page structure.
+- Module toggles use a 300ms debounce and preflight `probeModuleToggle` before writing state.
+- Shell panel routes `shell.execute` through the FFI and streams output into history.
 
 ## Prerequisites
 
-- Rust toolchain (`rustup`, `cargo`)
-- For iOS work:
-  - Xcode + command line tools
-  - `xcodebuild`
-  - `xcrun devicectl` (device deploy flow)
-- Optional but recommended:
-  - `rg` (ripgrep), used by launcher/install helpers
+| Tool | Required for |
+|------|-------------|
+| `rustup` / `cargo` | All Rust builds |
+| Xcode + command line tools | iOS framework build, device deploy |
+| `xcrun devicectl` | Physical device deploy |
+| `rg` (ripgrep) | Launcher iOS deploy flow |
 
-## Build And Run
+## Build and Run
 
-### Desktop (direct cargo)
+### Desktop — direct cargo
 
-From repository root:
+Run from the repository root:
 
-- Headless debug:
-  - `cargo run --manifest-path Desktop/Cargo.toml --target-dir target --features headless`
-- Headless release:
-  - `cargo run --manifest-path Desktop/Cargo.toml --target-dir target --release --features headless`
-- GUI debug:
-  - `cargo run --manifest-path Desktop/Cargo.toml --target-dir target --features gui`
-- GUI release:
-  - `cargo run --manifest-path Desktop/Cargo.toml --target-dir target --release --features gui`
+```bash
+# Headless
+cargo run --manifest-path Desktop/Cargo.toml --target-dir target --features headless
+cargo run --manifest-path Desktop/Cargo.toml --target-dir target --release --features headless
 
-### Desktop + iOS launcher menu
+# GUI
+cargo run --manifest-path Desktop/Cargo.toml --target-dir target --features gui
+cargo run --manifest-path Desktop/Cargo.toml --target-dir target --release --features gui
+```
 
-- `bash Shared/Scripts/Launcher.sh` (macOS/Linux shell)
-- `pwsh Shared/Scripts/Launcher.ps1` (PowerShell)
+### Desktop + iOS — launcher menu
 
-Launcher options include desktop run modes and physical iOS device deploy flows.
+```bash
+bash Shared/Scripts/Launcher.sh       # macOS / Linux
+pwsh Shared/Scripts/Launcher.ps1      # PowerShell
+```
 
-### Install Global Commands (macOS)
+Options: GUI/headless debug+release, iOS device deploy (Release or Debug).
 
-Install shortcuts into `~/.local/bin`:
+### Install global commands (macOS)
 
-- `bash Shared/Scripts/install-global-commands-macos.sh`
+```bash
+bash Shared/Scripts/install-global-commands-macos.sh
+```
 
-Commands installed:
+Installs `arcadia`, `arcadia-gui`, `arcadia-ios` into `~/.local/bin`.
 
-- `arcadia` (headless runner)
-- `arcadia-gui` (GUI runner)
-- `arcadia-ios` (build + deploy iOS app to connected physical device)
+If that directory is not on `PATH`:
 
-If `~/.local/bin` is not on `PATH`, add:
-
-- `export PATH="$HOME/.local/bin:$PATH"`
+```bash
+export PATH="$HOME/.local/bin:$PATH"   # add to ~/.zshrc
+```
 
 ## iOS Framework / Bindings Pipeline
 
-To rebuild shared iOS artifacts:
+Rebuild the shared iOS framework after any core API change:
 
-- `bash Shared/Scripts/build-ios-framework.sh`
+```bash
+bash Shared/Scripts/build-ios-framework.sh
+```
 
-This pipeline:
+This:
+1. Compiles `arcadia-core` for `aarch64-apple-ios` and `aarch64-apple-ios-sim`.
+2. Generates Swift bindings via `uniffi-bindgen`.
+3. Assembles `ArcadiaCore.xcframework` under `Mobile/iOS/ArcadiaCore/`.
 
-1. builds `arcadia-core` for device and simulator targets,
-2. generates Swift bindings via UniFFI,
-3. assembles `ArcadiaCore.xcframework` under `Mobile/iOS/ArcadiaCore/`.
+Then build and deploy with Xcode or use the launcher/global command flow.
 
-Then build/deploy app with Xcode or launcher/global command flow.
+### Device selection
 
-### Device Selection
+```bash
+ARCADIA_IOS_DEVICE_NAME="My iPhone"  # prefer a specific device by name
+ARCADIA_IOS_FORCE_UNINSTALL=1        # uninstall existing app before install
+```
 
-Device deploy scripts can auto-pick first connected physical iOS device or prefer a named one:
-
-- `ARCADIA_IOS_DEVICE_NAME="<Your Device Name>"`
-
-Optional uninstall before install:
-
-- `ARCADIA_IOS_FORCE_UNINSTALL=1`
+Both env vars work across `Launcher.sh`, `Launcher.ps1`, and the `arcadia-ios` global command.
 
 ## Core Command Model
 
-Arcadia commands are namespaced by module and executed as tokens like:
+Commands are namespaced `module.command` tokens:
 
-- `shell.execute <command...>`
-- `lan.scan [--range <CIDR-or-ip>]`
-- `lan.node pair|connect|accept|reject|alias|save|auto|status ...`
+```
+shell.execute <command...>
+lan.scan [--range <CIDR-or-ip>]
+lan.node pair|connect|accept|reject|alias|save|auto|status ...
+```
 
-Desktop CLI also supports:
+Desktop CLI also accepts:
 
-- `module <name> enable|disable`
-- `module <name> enable -requirements`
-- `configuration show|get|set|reset ...`
-- global routing flags:
-  - `--net:as lan:<host/ip/alias>`
-  - `--net:timeout <milliseconds>`
+```
+module <name> enable|disable
+module <name> enable -requirements
+configuration show|get|set|reset ...
+```
+
+Global routing flags (append to any command):
+
+```
+--net:as lan:<host/ip/alias>     route command to remote node via LAN
+--net:timeout <milliseconds>     override remote execution timeout
+```
+
+## Module System
+
+Modules live in `arcadia-core/src/modules/`. Each module exposes a `NAME` constant and a `commands()` slice of `ModuleCommand` entries.
+
+Module dependencies are declared in a single const table in `config/modules.rs`:
+
+```rust
+static MODULE_REGISTRY: &[(&str, &[&str])] = &[
+    ("lan",   &["net"]),   // lan requires net
+    ("net",   &[]),
+    ("shell", &[]),
+];
+```
+
+Adding a new module: one entry here, one `mod` in `modules/mod.rs`, implement `commands()`.
 
 ## Configuration
 
-Config files are persisted under the Arcadia configuration root:
+Config files are stored under the Arcadia configuration root:
 
-- desktop defaults to user-home scoped config storage,
-- iOS sets config root to app support container at launch.
+- **Desktop** — user home scoped (`~/Arcadia/Configuration/` or platform equivalent).
+- **iOS** — app support container, set at launch via `setConfigRootPath`.
 
-Current configurable areas include commandline shell preferences and module states.
+Configurable areas:
 
-## Recent Work Summary
+| Config | Keys |
+|--------|------|
+| `commandline` | `input_symbol`, `output_symbol`, `input_color`, `output_color`, `clear_on_start` |
+| `modules` | one key per module, `true`/`false` |
 
-This branch includes a major cross-surface update:
+Desktop CLI access:
 
-- Reworked desktop GPUI app into a real shell surface with:
-  - sidebar groups/pages sourced from shared navigation definitions,
-  - module management UI,
-  - in-app shell panel with command history and caret behavior.
-- Expanded iOS SwiftUI shell with:
-  - shared navigation registry decoding,
-  - richer sidebar/page handling,
-  - module toggling and shell interaction improvements,
-  - app-support config root bootstrap in `ArcadiaApp`.
-- Added shared navigation registry in core (`navigation` module) and exported JSON over UniFFI.
-- Upgraded module dependency logic:
-  - requirement graph support (`lan` requires `net`),
-  - preflight probing for missing requirements,
-  - requirement-aware enable flows exposed to FFI.
-- Extended LAN module capabilities:
-  - peer discovery, pairing and approval flows,
-  - aliases/rules/auto-approval controls,
-  - remote command execution with validation and timeout handling.
-- Hardened shell module command execution output handling (including ANSI cleanup).
-- Updated launcher scripts to use workspace manifest paths and consistent `target` directory.
-- Added iOS physical-device deploy options to launcher scripts and global `arcadia-ios` helper.
-- Refreshed iOS app icon assets and Xcode project integration.
-- Adjusted stable build matrix trigger behavior to focus on PR validation.
+```
+configuration show commandline
+configuration get commandline.input_color
+configuration set commandline.output_color cyan
+configuration reset commandline
+```
+
+## CI
+
+`.github/workflows/stable-build-matrix.yml` builds all six desktop targets (Linux/macOS/Windows × GUI/headless) plus the iOS simulator app on every PR to `stable`. Artifacts are published as a GitHub release on merge.
+
+Rust dependency caching via `swatinem/rust-cache@v2` is applied to all desktop matrix jobs.
 
 ## Development Notes
 
-- The repository may contain generated outputs (`build/`, framework artifacts) during active development.
-- Prefer script entrypoints in `Shared/Scripts/` for reproducible local flows.
-- Keep core APIs and navigation definitions in `arcadia-core` so desktop/iOS stay aligned.
+- Core, navigation, and module interfaces live in `arcadia-core` — keep desktop and iOS aligned through that single source.
+- `MODULE_REGISTRY` in `config/modules.rs` is the only place to register a new module's dependency rules.
+- Generated iOS artifacts (`ArcadiaCore/`, `build/`) are not committed; run `build-ios-framework.sh` to regenerate.
+- Prefer `Shared/Scripts/` entrypoints for reproducible local build and deploy flows.

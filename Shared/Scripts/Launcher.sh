@@ -39,6 +39,10 @@ run_arcadia() {
 }
 
 deploy_ios_device() {
+  if ! command -v rg >/dev/null 2>&1; then
+    echo "Error: rg (ripgrep) not found. Install via 'brew install ripgrep' and retry."
+    return 1
+  fi
   local configuration="$1"
   local project_path="${ROOT_DIR}/../Mobile/iOS/ArcadiaApp.xcodeproj"
   local shared_build_script="${ROOT_DIR}/Scripts/build-ios-framework.sh"
