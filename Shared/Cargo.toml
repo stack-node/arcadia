@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "ArcadiaCore",
+    "Tools/uniffi-bindgen",
+]
+resolver = "2"

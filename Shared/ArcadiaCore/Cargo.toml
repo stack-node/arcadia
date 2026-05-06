@@ -1,0 +1,14 @@
+[package]
+name = "arcadia-core"
+version = "0.1.0"
+edition = "2021"
+description = "Arcadia shared core logic (cross-platform)"
+license = "MIT"
+
+[lib]
+crate-type = ["staticlib", "cdylib", "lib"]
+
+[dependencies]
+serde  = { version = "1", features = ["derive"] }
+toml   = "0.8"
+uniffi = "0.28"
