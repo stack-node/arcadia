@@ -1784,6 +1784,7 @@ impl ArcadiaRoot {
 }
 
 const SPLASH_TOTAL_MS: f32 = 4500.0;
+const SPLASH_HILLS_FINAL_DROP_PX: f32 = 52.0;
 
 fn splash_phase(elapsed_ms: f32, start_ms: f32, duration_ms: f32) -> f32 {
     ((elapsed_ms - start_ms) / duration_ms).clamp(0.0, 1.0)
@@ -1883,7 +1884,7 @@ fn splash_draw_hills(bounds: Bounds<gpui::Pixels>, t: f32, window: &mut Window) 
     let h = f32::from(bounds.size.height);
     let ox = f32::from(bounds.origin.x);
     let oy = f32::from(bounds.origin.y);
-    let offset = (1.0 - t) * h * 0.35;
+    let offset = SPLASH_HILLS_FINAL_DROP_PX + (1.0 - t) * h * 0.35;
     let p = |fx: f32, fy: f32| -> gpui::Point<gpui::Pixels> {
         point(px(ox + fx * w), px(oy + fy * h + offset))
     };
