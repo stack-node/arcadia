@@ -8,6 +8,7 @@ pub const LAN_MODULE_NAME: &str = "lan";
 pub const NET_MODULE_NAME: &str = "net";
 pub const REMOTE_SESSION_MODULE_NAME: &str = "remote-session";
 pub const SHELL_MODULE_NAME: &str = "shell";
+pub const SHELL_MOTD_MODULE_NAME: &str = "shell-motd";
 const FILE_NAME: &str = "modules.toml";
 
 #[derive(Debug, Clone, Copy)]
@@ -43,6 +44,12 @@ static MODULE_REGISTRY: &[ModuleManifest] = &[
         version: "1.0.0",
         description: "Interactive shell command execution for Arcadia surfaces.",
         required_modules: &[],
+    },
+    ModuleManifest {
+        name: SHELL_MOTD_MODULE_NAME,
+        version: "1.0.0",
+        description: "Fastfetch-style banner when opening the Arcadia shell (requires shell).",
+        required_modules: &[SHELL_MODULE_NAME],
     },
 ];
 

@@ -2,20 +2,39 @@ use std::{env, time::Duration};
 
 use crate::cli;
 use arcadia_core::config::modules::{
-    ModuleManifest, ModulesConfig, NET_MODULE_NAME, REMOTE_SESSION_MODULE_NAME, SHELL_MODULE_NAME,
+    ModuleManifest, ModulesConfig, NET_MODULE_NAME, REMOTE_SESSION_MODULE_NAME,
+    SHELL_MODULE_NAME, SHELL_MOTD_MODULE_NAME,
 };
+use arcadia_core::modules::shell_motd;
 use arcadia_core::config::ConfigFile;
 use arcadia_core::modules;
 use arcadia_core::navigation;
 use gpui::{
     canvas, div, fill, img, point, px, rgb, size, AppContext, Application, Bounds, Context, Div,
     FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, PathBuilder, Render,
-    Rgba, SharedString, StatefulInteractiveElement, Styled, Timer, Window, WindowAppearance,
-    WindowOptions,
+    Rgba, ScrollHandle, SharedString, StatefulInteractiveElement, Styled, Timer, TitlebarOptions,
+    Window, WindowAppearance, WindowOptions,
 };
 
 use super::assets::EmbeddedAssets;
 use super::theme::{self, render_icon};
+
+/// Top inset so window chrome (macOS traffic lights) does not overlap the first row of UI.
+fn window_controls_top_padding(window: &Window) -> gpui::Pixels {
+    #[cfg(target_os = "macos")]
+    {
+        if window.is_fullscreen() {
+            px(0.)
+        } else {
+            (window.rem_size() * 2.25).max(px(28.))
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        px(0.)
+    }
+}
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ShellMode {
@@ -62,10 +81,12 @@ pub struct ArcadiaRoot {
     pub shell_caret_visible: bool,
     pub shell_caret_task_started: bool,
     pub shell_stream_nonce: u64,
+    pub shell_output_scroll: ScrollHandle,
     pub shell_mode: ShellMode,
     pub splash_elapsed_ms: f32,
     pub splash_tick_started: bool,
     pub sidebar_visible: bool,
+    pub app_menu_open: bool,
 }
 
 impl Render for ArcadiaRoot {
@@ -100,9 +121,18 @@ impl Render for ArcadiaRoot {
                 rgb(0xffffff)
             })
             .flex()
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    if this.app_menu_open {
+                        this.app_menu_open = false;
+                        cx.notify();
+                    }
+                }),
+            )
             .on_key_down(cx.listener(Self::handle_global_key_down))
             .child(if self.sidebar_visible {
-                self.render_sidebar(cx, &visible_groups, active_group, is_dark)
+                self.render_sidebar(window, cx, &visible_groups, active_group, is_dark)
             } else {
                 div()
             })
@@ -112,6 +142,14 @@ impl Render for ArcadiaRoot {
                     .h_full()
                     .flex()
                     .flex_col()
+                    .overflow_hidden()
+                    // Traffic lights sit over the sidebar when it is expanded; only inset the main
+                    // column when the sidebar is hidden so controls do not cover the top bar.
+                    .pt(if self.sidebar_visible {
+                        px(0.)
+                    } else {
+                        window_controls_top_padding(window)
+                    })
                     .child(
                         div()
                             .w_full()
@@ -156,28 +194,34 @@ impl Render for ArcadiaRoot {
                                                     .py_0p5()
                                                     .rounded_md()
                                                     .text_xs()
-                                                    .bg(if self.shell_mode == ShellMode::Internal {
+                                                    .bg(if self.shell_mode == ShellMode::Generic {
+                                                        // system: blue
                                                         if is_dark {
                                                             rgb(0x1e3a5f)
                                                         } else {
                                                             rgb(0xdbeafe)
                                                         }
-                                                    } else if is_dark {
-                                                        rgb(0x1f2937)
                                                     } else {
-                                                        rgb(0xf3f4f6)
+                                                        // internal: orange
+                                                        if is_dark {
+                                                            rgb(0x422006)
+                                                        } else {
+                                                            rgb(0xffedd5)
+                                                        }
                                                     })
                                                     .text_color(
-                                                        if self.shell_mode == ShellMode::Internal {
+                                                        if self.shell_mode == ShellMode::Generic {
                                                             if is_dark {
                                                                 rgb(0x93c5fd)
                                                             } else {
                                                                 rgb(0x1d4ed8)
                                                             }
-                                                        } else if is_dark {
-                                                            rgb(0x9ca3af)
                                                         } else {
-                                                            rgb(0x6b7280)
+                                                            if is_dark {
+                                                                rgb(0xfdba74)
+                                                            } else {
+                                                                rgb(0xc2410c)
+                                                            }
                                                         },
                                                     )
                                                     .child(self.shell_mode.label())
@@ -197,9 +241,32 @@ impl Render for ArcadiaRoot {
                                                         .text_color(theme::top_bar_pill_text(is_dark))
                                                         .child(self.shell_working_directory_label())
                                                 } else {
-                                                    div()
+                                                    div().hidden()
                                                 },
                                             )
+                                            .child(if self.active_page_id == "utility.shell" {
+                                                div()
+                                                    .px_2()
+                                                    .py_0p5()
+                                                    .rounded_md()
+                                                    .cursor_pointer()
+                                                    .text_xs()
+                                                    .bg(theme::top_bar_pill_bg(is_dark))
+                                                    .text_color(theme::top_bar_pill_text(is_dark))
+                                                    .hover(move |style| {
+                                                        style.bg(theme::top_bar_pill_hover_bg(is_dark))
+                                                    })
+                                                    .child("Reset")
+                                                    .on_mouse_down(
+                                                        gpui::MouseButton::Left,
+                                                        cx.listener(|this, _, _, cx| {
+                                                            this.reset_shell_state();
+                                                            cx.notify();
+                                                        }),
+                                                    )
+                                            } else {
+                                                div()
+                                            })
                                             .child(if self.active_page_id == "utility.shell" {
                                                 div()
                                                     .px_2()
@@ -217,6 +284,8 @@ impl Render for ArcadiaRoot {
                                                         gpui::MouseButton::Left,
                                                         cx.listener(|this, _, _, cx| {
                                                             this.shell_history.clear();
+                                                            this.shell_output_scroll
+                                                                .scroll_to_bottom();
                                                             cx.notify();
                                                         }),
                                                     )
@@ -234,13 +303,57 @@ impl Render for ArcadiaRoot {
                                     )),
                             ),
                     )
-                    .child(self.render_active_content(window, cx, active_page, is_dark)),
+                    .child(if self.active_page_id == "utility.shell" {
+                        div()
+                            .flex_1()
+                            .min_h_0()
+                            .w_full()
+                            .id("arcadia-page-shell")
+                            .child(self.render_active_content(window, cx, active_page, is_dark))
+                    } else {
+                        div()
+                            .flex_1()
+                            .w_full()
+                            .id("arcadia-page-scroll")
+                            .overflow_y_scroll()
+                            .child(self.render_active_content(window, cx, active_page, is_dark))
+                    }),
             )
             .child(self.requirements_modal(cx, is_dark))
     }
 }
 
 impl ArcadiaRoot {
+    fn reset_shell_state(&mut self) {
+        self.shell_stream_nonce = self.shell_stream_nonce.wrapping_add(1);
+        self.shell_history = Self::initial_shell_history();
+        self.shell_input.clear();
+        self.shell_cursor = 0;
+        self.shell_history_index = None;
+        self.shell_output_scroll.scroll_to_bottom();
+    }
+
+    fn initial_shell_history() -> Vec<String> {
+        let Ok(cfg) = ModulesConfig::load_or_create() else {
+            return vec!["Arcadia Terminal ready.".to_string()];
+        };
+        let shell_on = cfg
+            .modules
+            .get(SHELL_MODULE_NAME)
+            .copied()
+            .unwrap_or(false);
+        let motd_on = cfg
+            .modules
+            .get(SHELL_MOTD_MODULE_NAME)
+            .copied()
+            .unwrap_or(false);
+        if shell_on && motd_on {
+            shell_motd::motd_lines()
+        } else {
+            vec!["Arcadia Terminal ready.".to_string()]
+        }
+    }
+
     pub fn new(cx: &mut Context<Self>) -> Self {
         let shell_focus = cx.focus_handle();
         let module_rows = ModulesConfig::load_or_create()
@@ -258,7 +371,7 @@ impl ArcadiaRoot {
             module_rows,
             pending_module_enable: None,
             shell_enabled,
-            shell_history: vec!["Arcadia Terminal ready.".to_string()],
+            shell_history: Self::initial_shell_history(),
             shell_input: String::new(),
             shell_focus,
             shell_cursor: 0,
@@ -267,10 +380,12 @@ impl ArcadiaRoot {
             shell_caret_visible: true,
             shell_caret_task_started: false,
             shell_stream_nonce: 0,
+            shell_output_scroll: ScrollHandle::new(),
             shell_mode: ShellMode::Generic,
             splash_elapsed_ms: 0.0,
             splash_tick_started: false,
             sidebar_visible: true,
+            app_menu_open: false,
         }
     }
 
@@ -289,18 +404,20 @@ impl ArcadiaRoot {
 
     fn render_sidebar(
         &self,
+        window: &Window,
         cx: &mut Context<Self>,
         visible_groups: &[&'static navigation::NavigationGroupDefinition],
         active_group: &'static navigation::NavigationGroupDefinition,
         is_dark: bool,
     ) -> Div {
+        let top_inset = window_controls_top_padding(window);
+        // Pad content below traffic lights; outer column keeps full-height bg + border into titlebar.
+        let content_top_pad = top_inset + px(12.);
         div()
             .h_full()
             .w_64()
             .flex()
             .flex_col()
-            .p_4()
-            .gap_2()
             .bg(if is_dark {
                 rgb(0x171b22)
             } else {
@@ -315,108 +432,164 @@ impl ArcadiaRoot {
             .child(
                 div()
                     .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(img("icons/app-icon.png").size_8().rounded_sm())
+                    .flex_col()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .relative()
+                    .px_5()
+                    .pt(content_top_pad)
+                    .pb_6()
+                    .gap_4()
                     .child(
                         div()
-                            .text_lg()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .text_color(if is_dark {
-                                rgb(0xe5e7eb)
+                            .relative()
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .on_mouse_down(
+                                gpui::MouseButton::Right,
+                                cx.listener(|this, _, _, cx| {
+                                    this.app_menu_open = true;
+                                    cx.notify();
+                                }),
+                            )
+                            .child(img("icons/app-icon.png").size_8().rounded_sm())
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(if is_dark {
+                                        rgb(0xe5e7eb)
+                                    } else {
+                                        rgb(0x111827)
+                                    })
+                                    .child("Arcadia"),
+                            )
+                            .child(if self.remote_session_enabled() {
+                                div()
+                                    .ml_2()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(if is_dark {
+                                        rgb(0x374151)
+                                    } else {
+                                        rgb(0xd1d5db)
+                                    })
+                                    .bg(if is_dark {
+                                        rgb(0x111827)
+                                    } else {
+                                        rgb(0xffffff)
+                                    })
+                                    .text_xs()
+                                    .font_weight(gpui::FontWeight::NORMAL)
+                                    .text_color(if is_dark {
+                                        rgb(0xd1d5db)
+                                    } else {
+                                        rgb(0x374151)
+                                    })
+                                    .child("local v")
                             } else {
-                                rgb(0x111827)
-                            })
-                            .child("Arcadia"),
+                                div()
+                            }),
                     )
-                    .child(if self.remote_session_enabled() {
+                    .child(if self.app_menu_open {
                         div()
-                            .ml_2()
-                            .px_2()
-                            .py_1()
+                            .absolute()
+                            .top(px(40.))
+                            .left(px(0.))
+                            .w(px(112.))
+                            .p_1()
                             .rounded_md()
                             .border_1()
-                            .border_color(if is_dark {
-                                rgb(0x374151)
-                            } else {
-                                rgb(0xd1d5db)
-                            })
-                            .bg(if is_dark {
-                                rgb(0x111827)
-                            } else {
-                                rgb(0xffffff)
-                            })
-                            .text_xs()
-                            .font_weight(gpui::FontWeight::NORMAL)
-                            .text_color(if is_dark {
-                                rgb(0xd1d5db)
-                            } else {
-                                rgb(0x374151)
-                            })
-                            .child("local v")
+                            .border_color(if is_dark { rgb(0x374151) } else { rgb(0xd1d5db) })
+                            .bg(if is_dark { rgb(0x111827) } else { rgb(0xffffff) })
+                            .child(
+                                div()
+                                    .w_full()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_md()
+                                    .cursor_pointer()
+                                    .text_sm()
+                                    .text_color(if is_dark { rgb(0xfca5a5) } else { rgb(0x991b1b) })
+                                    .hover(move |style| {
+                                        style.bg(if is_dark { rgb(0x1f2937) } else { rgb(0xfef2f2) })
+                                    })
+                                    .child("Quit")
+                                    .on_mouse_down(
+                                        gpui::MouseButton::Left,
+                                        cx.listener(|this, _, _, _| {
+                                            this.app_menu_open = false;
+                                            this.run_internal_quit_command();
+                                        }),
+                                    ),
+                            )
                     } else {
-                        div()
-                    }),
-            )
-            .child(
-                div()
-                    .id("sidebar-group-tabs")
-                    .w_full()
-                    .overflow_x_scroll()
+                        div().hidden()
+                    })
                     .child(
                         div()
-                            .flex()
-                            .gap_2()
+                            .id("sidebar-group-tabs")
                             .w_full()
-                            .justify_center()
-                            .items_start()
-                            .children(visible_groups.iter().map(|group| {
-                                Self::sidebar_group_item(
-                                    cx,
-                                    group.label,
-                                    group.glyph,
-                                    group.id,
-                                    self.active_group_id == group.id,
-                                    is_dark,
-                                )
-                            })),
-                    ),
-            )
-            .child(
-                div()
-                    .id("sidebar-subtabs")
-                    .flex_1()
-                    .overflow_y_scroll()
-                    .child(div().flex().flex_col().gap_1().children(
-                        active_group.pages.iter().filter_map(|page_id| {
-                            if !self.is_page_visible(page_id) {
-                                return None;
-                            }
-                            Self::page_by_id(*page_id).map(|page| {
-                                Self::sidebar_item(
-                                    cx,
-                                    page.title,
-                                    page.glyph,
-                                    page.id,
-                                    self.active_page_id == page.id,
-                                    is_dark,
-                                )
-                            })
-                        }),
-                    )),
-            )
-            .children(navigation::GLOBAL_PAGE_IDS.iter().filter_map(|page_id| {
-                Self::page_by_id(*page_id).map(|page| {
-                    Self::sidebar_global_item(
-                        cx,
-                        page.title,
-                        page.glyph,
-                        page.id,
-                        self.active_page_id == page.id,
-                        is_dark,
+                            .overflow_x_scroll()
+                            .child(
+                                div()
+                                    .flex()
+                                    .gap_2()
+                                    .w_full()
+                                    .justify_center()
+                                    .items_start()
+                                    .children(visible_groups.iter().map(|group| {
+                                        Self::sidebar_group_item(
+                                            cx,
+                                            group.label,
+                                            group.glyph,
+                                            group.id,
+                                            self.active_group_id == group.id,
+                                            is_dark,
+                                        )
+                                    })),
+                            ),
                     )
-                })
-            }))
+                    .child(
+                        div()
+                            .id("sidebar-subtabs")
+                            .flex_1()
+                            .overflow_y_scroll()
+                            .child(div().flex().flex_col().gap_1().children(
+                                active_group.pages.iter().filter_map(|page_id| {
+                                    if !self.is_page_visible(page_id) {
+                                        return None;
+                                    }
+                                    Self::page_by_id(*page_id).map(|page| {
+                                        Self::sidebar_item(
+                                            cx,
+                                            page.title,
+                                            page.glyph,
+                                            page.id,
+                                            self.active_page_id == page.id,
+                                            is_dark,
+                                        )
+                                    })
+                                }),
+                            )),
+                    )
+                    .children(navigation::GLOBAL_PAGE_IDS.iter().filter_map(|page_id| {
+                        Self::page_by_id(*page_id).map(|page| {
+                            Self::sidebar_global_item(
+                                cx,
+                                page.title,
+                                page.glyph,
+                                page.id,
+                                self.active_page_id == page.id,
+                                is_dark,
+                            )
+                        })
+                    })),
+            )
     }
 
     fn render_active_content(
@@ -430,25 +603,24 @@ impl ArcadiaRoot {
             return div()
                 .flex_1()
                 .h_full()
+                .min_h_0()
                 .p_2()
                 .child(self.shell_panel(window, cx));
         }
         if self.active_page_id == "global.modules" {
             return div()
-                .flex_1()
-                .h_full()
+                .w_full()
                 .p_6()
                 .child(self.modules_panel(cx, is_dark));
         }
         div()
-            .flex_1()
-            .h_full()
+            .w_full()
             .p_6()
             .flex()
             .flex_col()
-            .justify_center()
             .items_center()
             .gap_3()
+            .py_16()
             .child(
                 div()
                     .text_3xl()
@@ -602,6 +774,7 @@ impl ArcadiaRoot {
         div()
             .w_full()
             .h_full()
+            .overflow_hidden()
             .p_1()
             .rounded_lg()
             .bg(if is_dark {
@@ -620,26 +793,35 @@ impl ArcadiaRoot {
             .gap_0()
             .child(
                 div()
-                    .w_full()
                     .flex_1()
-                    .p_3()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .children(self.shell_history.iter().map(|line| {
+                    .w_full()
+                    .min_h_0()
+                    .id("arcadia-shell-output")
+                    .overflow_y_scroll()
+                    .track_scroll(&self.shell_output_scroll)
+                    .child(
                         div()
-                            .text_sm()
-                            .text_color(if is_dark {
-                                rgb(0xe5e7eb)
-                            } else {
-                                rgb(0x1f2937)
-                            })
-                            .child(line.clone())
-                    })),
+                            .w_full()
+                            .p_3()
+                            .flex()
+                            .flex_col()
+                            .gap_2()
+                            .children(self.shell_history.iter().map(|line| {
+                                div()
+                                    .text_sm()
+                                    .text_color(if is_dark {
+                                        rgb(0xe5e7eb)
+                                    } else {
+                                        rgb(0x1f2937)
+                                    })
+                                    .child(line.clone())
+                            })),
+                    ),
             )
             .child(
                 div()
                     .w_full()
+                    .flex_shrink_0()
                     .px_3()
                     .py_2()
                     .flex()
@@ -901,6 +1083,11 @@ impl ArcadiaRoot {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        if event.keystroke.key.as_str() == "escape" && self.app_menu_open {
+            self.app_menu_open = false;
+            cx.notify();
+            return;
+        }
         if self.active_page_id != "utility.shell" {
             return;
         }
@@ -909,6 +1096,12 @@ impl ArcadiaRoot {
         if key == "tab" && mods.shift {
             self.shell_mode = self.shell_mode.toggle();
             cx.notify();
+        }
+    }
+
+    fn run_internal_quit_command(&mut self) {
+        if let crate::cli::CommandResult::Quit = cli::handle("quit") {
+            std::process::exit(0);
         }
     }
 
@@ -922,6 +1115,7 @@ impl ArcadiaRoot {
         if normalized.eq_ignore_ascii_case("clear") || normalized.eq_ignore_ascii_case("cls") {
             self.shell_stream_nonce = self.shell_stream_nonce.wrapping_add(1);
             self.shell_history.clear();
+            self.shell_output_scroll.scroll_to_bottom();
             cx.notify();
             return;
         }
@@ -934,12 +1128,14 @@ impl ArcadiaRoot {
         self.shell_stream_nonce = self.shell_stream_nonce.wrapping_add(1);
         let stream_nonce = self.shell_stream_nonce;
         self.shell_history.push(format!("$ {command}"));
+        self.shell_output_scroll.scroll_to_bottom();
         let output = match result {
             Ok(Some(output)) => output,
             Ok(None) => "Unknown shell command token.".to_string(),
             Err(err) => err,
         };
         self.shell_history.push(String::new());
+        self.shell_output_scroll.scroll_to_bottom();
         // Stream output line-by-line via async task to keep UI responsive
         let lines: Vec<String> = output.lines().map(str::to_string).collect();
         cx.spawn_in(
@@ -955,6 +1151,7 @@ impl ArcadiaRoot {
                                     return;
                                 }
                                 this.shell_history.push(line);
+                                this.shell_output_scroll.scroll_to_bottom();
                                 cx.notify();
                             });
                         });
@@ -963,6 +1160,7 @@ impl ArcadiaRoot {
                         let _ = view.update(app, |this, cx| {
                             if this.shell_stream_nonce == stream_nonce {
                                 this.shell_history.push(String::new());
+                                this.shell_output_scroll.scroll_to_bottom();
                                 cx.notify();
                             }
                         });
@@ -1290,7 +1488,13 @@ impl ArcadiaRoot {
             .flex()
             .items_center()
             .justify_center()
-            .child(render_icon(page_glyph).size_4())
+            .child(
+                render_icon(page_glyph).size_4().text_color(if is_dark {
+                    rgb(0xe5e7eb)
+                } else {
+                    rgb(0x1f2937)
+                }),
+            )
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
@@ -1944,9 +2148,18 @@ pub fn run() {
     });
 
     Application::new().with_assets(EmbeddedAssets).run(|app| {
-        app.open_window(WindowOptions::default(), |_window, app| {
-            app.new(|cx| ArcadiaRoot::new(cx))
-        })
+        app.open_window(
+            WindowOptions {
+                titlebar: Some(TitlebarOptions {
+                    appears_transparent: true,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+            |_window, app| {
+                app.new(|cx| ArcadiaRoot::new(cx))
+            },
+        )
         .expect("failed to open GPUI window");
     });
 }

@@ -1,6 +1,7 @@
 pub mod lan;
 pub mod net;
 pub mod shell;
+pub mod shell_motd;
 
 use crate::config::modules::{ModulesConfig, NET_MODULE_NAME};
 use crate::config::ConfigFile;
@@ -22,6 +23,7 @@ fn module_commands(module_name: &str) -> Option<&'static [ModuleCommand]> {
         lan::NAME => Some(lan::commands()),
         net::NAME => Some(net::commands()),
         shell::NAME => Some(shell::commands()),
+        shell_motd::NAME => Some(shell_motd::commands()),
         _ => None,
     }
 }
@@ -169,7 +171,7 @@ pub fn all_command_entries() -> Vec<(String, String)> {
 }
 
 pub fn load_all() {
-    let _known_modules = [lan::NAME, net::NAME, shell::NAME];
+    let _known_modules = [lan::NAME, net::NAME, shell::NAME, shell_motd::NAME];
     lan::start_service();
 
     if let Err(err) = ModulesConfig::load_or_create() {
