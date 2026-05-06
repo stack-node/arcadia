@@ -421,3 +421,113 @@ pub fn module_button_disable_text(is_dark: bool) -> Rgba {
         }
     }
 }
+
+/// Neutral compact pill in the main top bar (matches cwd / small actions).
+pub fn top_bar_pill_bg(is_dark: bool) -> Rgba {
+    if is_dark {
+        Rgba {
+            r: 0.122,
+            g: 0.161,
+            b: 0.216,
+            a: 1.0,
+        }
+    } else {
+        Rgba {
+            r: 0.953,
+            g: 0.957,
+            b: 0.961,
+            a: 1.0,
+        }
+    }
+}
+
+pub fn top_bar_pill_text(is_dark: bool) -> Rgba {
+    if is_dark {
+        Rgba {
+            r: 0.820,
+            g: 0.847,
+            b: 0.859,
+            a: 1.0,
+        }
+    } else {
+        Rgba {
+            r: 0.294,
+            g: 0.337,
+            b: 0.388,
+            a: 1.0,
+        }
+    }
+}
+
+pub fn top_bar_pill_hover_bg(is_dark: bool) -> Rgba {
+    if is_dark {
+        Rgba {
+            r: 0.165,
+            g: 0.212,
+            b: 0.278,
+            a: 1.0,
+        }
+    } else {
+        Rgba {
+            r: 0.922,
+            g: 0.929,
+            b: 0.941,
+            a: 1.0,
+        }
+    }
+}
+
+/// Selected top-bar nav pill (e.g. Logs when that page is active).
+pub fn top_bar_pill_active_bg(is_dark: bool) -> Rgba {
+    if is_dark {
+        Rgba {
+            r: 0.122,
+            g: 0.165,
+            b: 0.243,
+            a: 1.0,
+        }
+    } else {
+        Rgba {
+            r: 0.882,
+            g: 0.906,
+            b: 1.000,
+            a: 1.0,
+        }
+    }
+}
+
+pub fn top_bar_pill_active_text(is_dark: bool) -> Rgba {
+    if is_dark {
+        Rgba {
+            r: 0.576,
+            g: 0.773,
+            b: 0.992,
+            a: 1.0,
+        }
+    } else {
+        Rgba {
+            r: 0.114,
+            g: 0.306,
+            b: 0.847,
+            a: 1.0,
+        }
+    }
+}
+
+pub fn top_bar_pill_active_hover_bg(is_dark: bool) -> Rgba {
+    if is_dark {
+        Rgba {
+            r: 0.145,
+            g: 0.196,
+            b: 0.282,
+            a: 1.0,
+        }
+    } else {
+        Rgba {
+            r: 0.855,
+            g: 0.878,
+            b: 0.992,
+            a: 1.0,
+        }
+    }
+}

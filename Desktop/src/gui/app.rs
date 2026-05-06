@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{env, time::Duration};
 
 use crate::cli;
 use arcadia_core::config::modules::{
@@ -33,7 +33,7 @@ impl ShellMode {
 
     fn label(self) -> &'static str {
         match self {
-            ShellMode::Generic => "shell",
+            ShellMode::Generic => "system",
             ShellMode::Internal => "internal",
         }
     }
@@ -89,6 +89,8 @@ impl Render for ArcadiaRoot {
             .find(|group| group.id == self.active_group_id)
             .or_else(|| visible_groups.first().copied())
             .unwrap_or(Self::group_by_id(navigation::DEFAULT_GROUP_ID));
+        let active_page_title = active_page.map(|page| page.title).unwrap_or("Arcadia");
+        let active_page_glyph = active_page.map(|page| page.glyph).unwrap_or("tools");
 
         div()
             .size_full()
@@ -98,6 +100,7 @@ impl Render for ArcadiaRoot {
                 rgb(0xffffff)
             })
             .flex()
+            .on_key_down(cx.listener(Self::handle_global_key_down))
             .child(if self.sidebar_visible {
                 self.render_sidebar(cx, &visible_groups, active_group, is_dark)
             } else {
@@ -126,8 +129,102 @@ impl Render for ArcadiaRoot {
                                     .flex()
                                     .items_center()
                                     .justify_between()
-                                    .child(Self::sidebar_toggle_button(cx, is_dark))
-                                    .child(Self::sidebar_global_item(
+                                    .child(
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap_3()
+                                            .child(Self::sidebar_toggle_button(
+                                                cx,
+                                                active_page_glyph,
+                                                is_dark,
+                                            ))
+                                            .child(
+                                                div()
+                                                    .text_sm()
+                                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                                    .text_color(if is_dark {
+                                                        rgb(0xe5e7eb)
+                                                    } else {
+                                                        rgb(0x1f2937)
+                                                    })
+                                                    .child(active_page_title),
+                                            )
+                                            .child(if self.active_page_id == "utility.shell" {
+                                                div()
+                                                    .px_2()
+                                                    .py_0p5()
+                                                    .rounded_md()
+                                                    .text_xs()
+                                                    .bg(if self.shell_mode == ShellMode::Internal {
+                                                        if is_dark {
+                                                            rgb(0x1e3a5f)
+                                                        } else {
+                                                            rgb(0xdbeafe)
+                                                        }
+                                                    } else if is_dark {
+                                                        rgb(0x1f2937)
+                                                    } else {
+                                                        rgb(0xf3f4f6)
+                                                    })
+                                                    .text_color(
+                                                        if self.shell_mode == ShellMode::Internal {
+                                                            if is_dark {
+                                                                rgb(0x93c5fd)
+                                                            } else {
+                                                                rgb(0x1d4ed8)
+                                                            }
+                                                        } else if is_dark {
+                                                            rgb(0x9ca3af)
+                                                        } else {
+                                                            rgb(0x6b7280)
+                                                        },
+                                                    )
+                                                    .child(self.shell_mode.label())
+                                            } else {
+                                                div()
+                                            })
+                                            .child(
+                                                if self.active_page_id == "utility.shell"
+                                                    && self.shell_mode == ShellMode::Generic
+                                                {
+                                                    div()
+                                                        .px_2()
+                                                        .py_0p5()
+                                                        .rounded_md()
+                                                        .text_xs()
+                                                        .bg(theme::top_bar_pill_bg(is_dark))
+                                                        .text_color(theme::top_bar_pill_text(is_dark))
+                                                        .child(self.shell_working_directory_label())
+                                                } else {
+                                                    div()
+                                                },
+                                            )
+                                            .child(if self.active_page_id == "utility.shell" {
+                                                div()
+                                                    .px_2()
+                                                    .py_0p5()
+                                                    .rounded_md()
+                                                    .cursor_pointer()
+                                                    .text_xs()
+                                                    .bg(theme::top_bar_pill_bg(is_dark))
+                                                    .text_color(theme::top_bar_pill_text(is_dark))
+                                                    .hover(move |style| {
+                                                        style.bg(theme::top_bar_pill_hover_bg(is_dark))
+                                                    })
+                                                    .child("Clear")
+                                                    .on_mouse_down(
+                                                        gpui::MouseButton::Left,
+                                                        cx.listener(|this, _, _, cx| {
+                                                            this.shell_history.clear();
+                                                            cx.notify();
+                                                        }),
+                                                    )
+                                            } else {
+                                                div()
+                                            })
+                                    )
+                                    .child(Self::top_bar_global_item(
                                         cx,
                                         "Logs",
                                         "logs",
@@ -524,97 +621,6 @@ impl ArcadiaRoot {
             .child(
                 div()
                     .w_full()
-                    .px_3()
-                    .py_2()
-                    .flex()
-                    .justify_between()
-                    .items_center()
-                    .bg(if is_dark {
-                        rgb(0x0f141b)
-                    } else {
-                        rgb(0xffffff)
-                    })
-                    .border_b_1()
-                    .border_color(if is_dark {
-                        rgb(0x2f3948)
-                    } else {
-                        rgb(0xe2e8f0)
-                    })
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .text_sm()
-                                    .text_color(if is_dark {
-                                        rgb(0xe5e7eb)
-                                    } else {
-                                        rgb(0x111827)
-                                    })
-                                    .child("Terminal"),
-                            )
-                            .child(
-                                div()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded_md()
-                                    .text_xs()
-                                    .bg(if self.shell_mode == ShellMode::Internal {
-                                        if is_dark {
-                                            rgb(0x1e3a5f)
-                                        } else {
-                                            rgb(0xdbeafe)
-                                        }
-                                    } else if is_dark {
-                                        rgb(0x1f2937)
-                                    } else {
-                                        rgb(0xf3f4f6)
-                                    })
-                                    .text_color(if self.shell_mode == ShellMode::Internal {
-                                        if is_dark {
-                                            rgb(0x93c5fd)
-                                        } else {
-                                            rgb(0x1d4ed8)
-                                        }
-                                    } else if is_dark {
-                                        rgb(0x9ca3af)
-                                    } else {
-                                        rgb(0x6b7280)
-                                    })
-                                    .child(self.shell_mode.label()),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .px_2()
-                            .py_1()
-                            .rounded_md()
-                            .cursor_pointer()
-                            .bg(if is_dark {
-                                rgb(0x1f2937)
-                            } else {
-                                rgb(0xf3f4f6)
-                            })
-                            .text_color(if is_dark {
-                                rgb(0xd1d5db)
-                            } else {
-                                rgb(0x374151)
-                            })
-                            .child("Clear")
-                            .on_mouse_down(
-                                gpui::MouseButton::Left,
-                                cx.listener(|this, _, _, cx| {
-                                    this.shell_history.clear();
-                                    cx.notify();
-                                }),
-                            ),
-                    ),
-            )
-            .child(
-                div()
-                    .w_full()
                     .flex_1()
                     .p_3()
                     .flex()
@@ -697,6 +703,13 @@ impl ArcadiaRoot {
             out.push('|');
         }
         out
+    }
+
+    fn shell_working_directory_label(&self) -> String {
+        env::current_dir()
+            .ok()
+            .and_then(|path| path.to_str().map(ToOwned::to_owned))
+            .unwrap_or_else(|| "cwd: unavailable".to_string())
     }
 
     pub fn ensure_shell_caret_task(&mut self, window: &mut Window, cx: &mut Context<Self>) {
@@ -807,11 +820,6 @@ impl ArcadiaRoot {
         }
         let key = event.keystroke.key.as_str();
         let mods = event.keystroke.modifiers;
-        if key == "tab" && mods.shift {
-            self.shell_mode = self.shell_mode.toggle();
-            cx.notify();
-            return;
-        }
         match key {
             "enter" => {
                 let command = self.shell_input.trim().to_string();
@@ -885,6 +893,23 @@ impl ArcadiaRoot {
             }
         }
         cx.notify();
+    }
+
+    fn handle_global_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.active_page_id != "utility.shell" {
+            return;
+        }
+        let key = event.keystroke.key.as_str();
+        let mods = event.keystroke.modifiers;
+        if key == "tab" && mods.shift {
+            self.shell_mode = self.shell_mode.toggle();
+            cx.notify();
+        }
     }
 
     pub fn run_shell_execute(
@@ -1068,7 +1093,6 @@ impl ArcadiaRoot {
         manifest: Option<&'static ModuleManifest>,
         is_dark: bool,
     ) -> impl IntoElement {
-        let label = if enabled { "Disable" } else { "Enable" };
         let version = manifest.map(|m| m.version).unwrap_or("unknown");
         let description = manifest
             .map(|m| m.description)
@@ -1138,23 +1162,72 @@ impl ArcadiaRoot {
             )
             .child(
                 div()
-                    .px_3()
-                    .py_1p5()
-                    .rounded_md()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .px_2()
+                    .py_1()
+                    .rounded_full()
                     .cursor_pointer()
                     .bg(if enabled {
-                        theme::module_button_disable_bg(is_dark)
+                        theme::module_state_enabled_bg(is_dark)
                     } else {
-                        theme::module_button_enable_bg(is_dark)
+                        theme::module_state_disabled_bg(is_dark)
                     })
-                    .text_color(if enabled {
-                        theme::module_button_disable_text(is_dark)
+                    .child(
+                        div()
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                            .text_color(if enabled {
+                                theme::module_state_enabled_text(is_dark)
+                            } else {
+                                theme::module_state_disabled_text(is_dark)
+                            })
+                            .child(if enabled { "ON" } else { "OFF" }),
+                    )
+                    .child(if enabled {
+                        div()
+                            .w_10()
+                            .h_6()
+                            .px_0p5()
+                            .rounded_full()
+                            .border_1()
+                            .border_color(theme::module_row_stroke(is_dark))
+                            .bg(theme::module_button_enable_bg(is_dark))
+                            .flex()
+                            .items_center()
+                            .justify_end()
+                            .child(
+                                div()
+                                    .w_4()
+                                    .h_4()
+                                    .rounded_full()
+                                    .bg(theme::module_button_enable_text(is_dark)),
+                            )
                     } else {
-                        theme::module_button_enable_text(is_dark)
+                        div()
+                            .w_10()
+                            .h_6()
+                            .px_0p5()
+                            .rounded_full()
+                            .border_1()
+                            .border_color(theme::module_row_stroke(is_dark))
+                            .bg(theme::module_panel_stroke(is_dark))
+                            .flex()
+                            .items_center()
+                            .justify_start()
+                            .child(
+                                div()
+                                    .w_4()
+                                    .h_4()
+                                    .rounded_full()
+                                    .bg(if is_dark {
+                                        rgb(0xd1d5db)
+                                    } else {
+                                        rgb(0xf8fafc)
+                                    }),
+                            )
                     })
-                    .text_sm()
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .child(label)
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(move |this, _, _, cx| {
@@ -1187,7 +1260,11 @@ impl ArcadiaRoot {
             )
     }
 
-    pub fn sidebar_toggle_button(cx: &mut Context<Self>, is_dark: bool) -> impl IntoElement {
+    pub fn sidebar_toggle_button(
+        cx: &mut Context<Self>,
+        page_glyph: &'static str,
+        is_dark: bool,
+    ) -> impl IntoElement {
         div()
             .w_8()
             .h_8()
@@ -1213,7 +1290,7 @@ impl ArcadiaRoot {
             .flex()
             .items_center()
             .justify_center()
-            .child(render_icon("tools").size_4())
+            .child(render_icon(page_glyph).size_4())
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
@@ -1297,6 +1374,69 @@ impl ArcadiaRoot {
                         if let Some(first_page_id) = group.pages.first() {
                             this.active_page_id = first_page_id;
                         }
+                    }
+                    cx.notify();
+                }),
+            )
+    }
+
+    /// Compact top-bar control (same visual weight as neutral badges). Use for header actions only;
+    /// the sidebar still uses [`Self::sidebar_global_item`].
+    pub fn top_bar_global_item(
+        cx: &mut Context<Self>,
+        label: &'static str,
+        system_image: &'static str,
+        page_id: &'static str,
+        is_active: bool,
+        is_dark: bool,
+    ) -> impl IntoElement {
+        let icon_color = if is_active {
+            theme::top_bar_pill_active_text(is_dark)
+        } else {
+            theme::top_bar_pill_text(is_dark)
+        };
+        div()
+            .px_2()
+            .py_0p5()
+            .rounded_md()
+            .cursor_pointer()
+            .text_xs()
+            .font_weight(if is_active {
+                gpui::FontWeight::SEMIBOLD
+            } else {
+                gpui::FontWeight::NORMAL
+            })
+            .bg(if is_active {
+                theme::top_bar_pill_active_bg(is_dark)
+            } else {
+                theme::top_bar_pill_bg(is_dark)
+            })
+            .text_color(icon_color)
+            .hover(move |style| {
+                style.bg(if is_active {
+                    theme::top_bar_pill_active_hover_bg(is_dark)
+                } else {
+                    theme::top_bar_pill_hover_bg(is_dark)
+                })
+            })
+            .child(
+                div()
+                    .flex()
+                    .gap_1()
+                    .items_center()
+                    .child(
+                        render_icon(system_image)
+                            .size_4()
+                            .text_color(icon_color),
+                    )
+                    .child(div().child(label)),
+            )
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, _, _, cx| {
+                    this.active_page_id = page_id;
+                    if page_id == "global.modules" {
+                        this.reload_modules();
                     }
                     cx.notify();
                 }),
