@@ -22,6 +22,13 @@ pub struct ModuleStatus {
     pub enabled: bool,
 }
 
+#[derive(uniffi::Record)]
+pub struct ModuleToggleResult {
+    pub ok: bool,
+    pub message: String,
+    pub missing_requirements: Vec<String>,
+}
+
 /// Set the config directory path. Must be called before any other API on iOS.
 /// Desktop callers skip this — $HOME is used by default.
 #[uniffi::export]
@@ -74,6 +81,25 @@ pub fn set_module_enabled(name: String, enabled: bool) -> String {
         Ok(c) => c,
         Err(e) => return format!("Error loading config: {e}"),
     };
+    let result = cfg.set_module_state(&name, enabled);
+    match result {
+        Ok(()) => match cfg.save() {
+            Ok(()) => format!(
+                "Module {name} {}",
+                if enabled { "enabled" } else { "disabled" }
+            ),
+            Err(e) => format!("Error saving config: {e}"),
+        },
+        Err(e) => e,
+    }
+}
+
+#[uniffi::export]
+pub fn set_module_enabled_with_requirements(name: String, enabled: bool) -> String {
+    let mut cfg = match ModulesConfig::load_or_create() {
+        Ok(c) => c,
+        Err(e) => return format!("Error loading config: {e}"),
+    };
     let result = if enabled {
         cfg.enable_with_requirements(&name)
     } else {
@@ -81,10 +107,51 @@ pub fn set_module_enabled(name: String, enabled: bool) -> String {
     };
     match result {
         Ok(()) => match cfg.save() {
-            Ok(()) => format!("Module {name} {}", if enabled { "enabled" } else { "disabled" }),
+            Ok(()) => format!(
+                "Module {name} {}",
+                if enabled { "enabled" } else { "disabled" }
+            ),
             Err(e) => format!("Error saving config: {e}"),
         },
         Err(e) => e,
+    }
+}
+
+#[uniffi::export]
+pub fn probe_module_toggle(name: String, enabled: bool) -> ModuleToggleResult {
+    let cfg = match ModulesConfig::load_or_create() {
+        Ok(c) => c,
+        Err(e) => {
+            return ModuleToggleResult {
+                ok: false,
+                message: format!("Error loading config: {e}"),
+                missing_requirements: vec![],
+            };
+        }
+    };
+    if !enabled {
+        return ModuleToggleResult {
+            ok: true,
+            message: String::new(),
+            missing_requirements: vec![],
+        };
+    }
+    match cfg.missing_requirements_for(&name) {
+        Ok(missing) if missing.is_empty() => ModuleToggleResult {
+            ok: true,
+            message: String::new(),
+            missing_requirements: vec![],
+        },
+        Ok(missing) => ModuleToggleResult {
+            ok: false,
+            message: format!("Cannot enable {name} without required modules."),
+            missing_requirements: missing,
+        },
+        Err(e) => ModuleToggleResult {
+            ok: false,
+            message: e,
+            missing_requirements: vec![],
+        },
     }
 }
 
@@ -93,6 +160,14 @@ pub fn set_module_enabled(name: String, enabled: bool) -> String {
 pub fn platform_name() -> String {
     use crate::platform::PlatformInfo;
     crate::platform::current().name().to_string()
+}
+
+/// Returns the default navigation registry as JSON.
+/// This payload is shared by desktop and mobile shells and can later be merged
+/// with extension-provided pages/groups at runtime.
+#[uniffi::export]
+pub fn navigation_registry_json() -> String {
+    crate::navigation::default_navigation_registry_json()
 }
 
 /// Start the LAN background service thread. Safe to call multiple times.
@@ -131,6 +206,14 @@ impl ModuleManager {
         set_module_enabled(name, enabled)
     }
 
+    pub fn set_enabled_with_requirements(&self, name: String, enabled: bool) -> String {
+        set_module_enabled_with_requirements(name, enabled)
+    }
+
+    pub fn probe_toggle(&self, name: String, enabled: bool) -> ModuleToggleResult {
+        probe_module_toggle(name, enabled)
+    }
+
     pub fn execute(&self, token: String, args: Vec<String>) -> String {
         execute_command(token, args, ExecutionContextFfi::default())
     }
@@ -139,7 +222,10 @@ impl ModuleManager {
         execute_command(
             token,
             args,
-            ExecutionContextFfi { net_as: Some(net_as), net_timeout_ms: None },
+            ExecutionContextFfi {
+                net_as: Some(net_as),
+                net_timeout_ms: None,
+            },
         )
     }
 }

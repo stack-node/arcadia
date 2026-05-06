@@ -207,7 +207,11 @@ fn modules_keys() -> Result<Vec<String>, String> {
     Ok(cfg.modules.keys().cloned().collect())
 }
 
-fn module_set_state(module_name: &str, enabled: bool, with_requirements: bool) -> Result<(), String> {
+fn module_set_state(
+    module_name: &str,
+    enabled: bool,
+    with_requirements: bool,
+) -> Result<(), String> {
     let mut cfg = ModulesConfig::load_or_create().map_err(|err| err.to_string())?;
     if enabled && with_requirements {
         cfg.enable_with_requirements(module_name)?;
@@ -330,7 +334,9 @@ fn modules_set(key: &str, value: &str) -> Result<(), String> {
 
 fn modules_reset(target: Option<&str>) -> Result<(), String> {
     match target {
-        None => ModulesConfig::default().save().map_err(|err| err.to_string()),
+        None => ModulesConfig::default()
+            .save()
+            .map_err(|err| err.to_string()),
         Some(key) => {
             let defaults = ModulesConfig::default();
             let default_value = defaults
@@ -388,7 +394,9 @@ fn normalize_command(command: &str) -> String {
         .unwrap_or_else(|| command.to_string())
 }
 
-fn parse_execution_context(parts: &[String]) -> Result<(Vec<String>, modules::ExecutionContext), String> {
+fn parse_execution_context(
+    parts: &[String],
+) -> Result<(Vec<String>, modules::ExecutionContext), String> {
     let mut cleaned = Vec::new();
     let mut net_as: Option<String> = None;
     let mut net_timeout_ms: Option<u64> = None;
@@ -413,9 +421,9 @@ fn parse_execution_context(parts: &[String]) -> Result<(Vec<String>, modules::Ex
             let Some(value) = parts.get(i + 1) else {
                 return Err("Usage: --net:timeout <milliseconds>".to_string());
             };
-            let parsed = value
-                .parse::<u64>()
-                .map_err(|_| "Invalid --net:timeout value. Use an integer in milliseconds".to_string())?;
+            let parsed = value.parse::<u64>().map_err(|_| {
+                "Invalid --net:timeout value. Use an integer in milliseconds".to_string()
+            })?;
             net_timeout_ms = Some(parsed);
             i += 2;
             continue;
@@ -488,7 +496,11 @@ fn completion_candidates(line: &str, pos: usize) -> (usize, Vec<String>) {
 
 pub fn print_response(message: &str) {
     let cfg = settings();
-    println!("{}{}\x1b[0m {message}", cfg.output_ansi_code(), cfg.output_symbol);
+    println!(
+        "{}{}\x1b[0m {message}",
+        cfg.output_ansi_code(),
+        cfg.output_symbol
+    );
 }
 
 pub fn print_startup(mode: &str) {
@@ -727,7 +739,10 @@ fn open_config(config_name: &str) {
             path.display(),
             exit.code()
         )),
-        Err(err) => print_response(&format!("Failed to launch editor for {}: {err}", path.display())),
+        Err(err) => print_response(&format!(
+            "Failed to launch editor for {}: {err}",
+            path.display()
+        )),
     }
 }
 
@@ -767,11 +782,7 @@ fn editor() -> Editor<CliHelper, DefaultHistory> {
 
 fn read_command(editor: &mut Editor<CliHelper, DefaultHistory>) -> io::Result<Option<String>> {
     let cfg = settings();
-    let prompt = format!(
-        "\x01{}\x02{}\x01\x1b[0m\x02 ",
-        cfg.input_ansi_code(),
-        cfg.input_symbol
-    );
+    let prompt = format!("{}{}\x1b[0m ", cfg.input_ansi_code(), cfg.input_symbol);
     match editor.readline(&prompt) {
         Ok(line) => {
             if !line.trim().is_empty() {
@@ -837,11 +848,7 @@ pub fn handle(input: &str) -> CommandResult {
     }
     if let Some(first) = parts.first().map(String::as_str) {
         if first.contains('.') {
-            let args = parts
-                .iter()
-                .skip(1)
-                .map(String::as_str)
-                .collect::<Vec<_>>();
+            let args = parts.iter().skip(1).map(String::as_str).collect::<Vec<_>>();
             match modules::execute_command(first, &args, &exec_ctx) {
                 Ok(Some(message)) => {
                     print_response(&message);
@@ -857,11 +864,7 @@ pub fn handle(input: &str) -> CommandResult {
     }
     if parts.len() >= 2 {
         let composed = format!("{}.{}", parts[0], parts[1]);
-        let args = parts
-            .iter()
-            .skip(2)
-            .map(String::as_str)
-            .collect::<Vec<_>>();
+        let args = parts.iter().skip(2).map(String::as_str).collect::<Vec<_>>();
         match modules::execute_command(&composed, &args, &exec_ctx) {
             Ok(Some(message)) => {
                 print_response(&message);

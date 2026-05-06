@@ -15,8 +15,10 @@ pub struct ModulesConfig {
 }
 
 fn required_modules(module_name: &str) -> &'static [&'static str] {
-    let _ = module_name;
-    &[]
+    match module_name {
+        LAN_MODULE_NAME => &[NET_MODULE_NAME],
+        _ => &[],
+    }
 }
 
 impl Default for ModulesConfig {
@@ -30,6 +32,45 @@ impl Default for ModulesConfig {
 }
 
 impl ModulesConfig {
+    pub fn required_modules_for(module_name: &str) -> Result<&'static [&'static str], String> {
+        match module_name {
+            LAN_MODULE_NAME | NET_MODULE_NAME | SHELL_MODULE_NAME => {
+                Ok(required_modules(module_name))
+            }
+            _ => Err("Unknown module key".to_string()),
+        }
+    }
+
+    pub fn missing_requirements_for(&self, module_name: &str) -> Result<Vec<String>, String> {
+        if !self.modules.contains_key(module_name) {
+            return Err("Unknown module key".to_string());
+        }
+        let mut missing = Vec::new();
+        self.collect_missing_requirements(module_name, &mut missing)?;
+        missing.sort();
+        missing.dedup();
+        Ok(missing)
+    }
+
+    fn collect_missing_requirements(
+        &self,
+        module_name: &str,
+        missing: &mut Vec<String>,
+    ) -> Result<(), String> {
+        for required in Self::required_modules_for(module_name)? {
+            let Some(required_enabled) = self.modules.get(*required) else {
+                return Err(format!(
+                    "Cannot enable {module_name}: required module {required} is missing"
+                ));
+            };
+            if !required_enabled {
+                missing.push((*required).to_string());
+            }
+            self.collect_missing_requirements(required, missing)?;
+        }
+        Ok(())
+    }
+
     pub fn enable_with_requirements(&mut self, module_name: &str) -> Result<(), String> {
         if !self.modules.contains_key(module_name) {
             return Err("Unknown module key".to_string());

@@ -46,11 +46,34 @@ for DIR in "${DEVICE_DIR}" "${SIM_DIR}"; do
     mkdir -p "${DIR}/Headers" "${DIR}/Modules"
 done
 
-HEADER="${BINDGEN_OUT}/arcadia_coreCFFI.h"
-MODULEMAP="${BINDGEN_OUT}/arcadia_coreCFFI.modulemap"
+HEADER=""
+MODULEMAP=""
+for candidate in \
+    "${BINDGEN_OUT}/arcadia_coreFFI.h" \
+    "${BINDGEN_OUT}/arcadia_coreCFFI.h"; do
+    if [[ -f "${candidate}" ]]; then
+        HEADER="${candidate}"
+        break
+    fi
+done
+
+for candidate in \
+    "${BINDGEN_OUT}/arcadia_coreFFI.modulemap" \
+    "${BINDGEN_OUT}/arcadia_coreCFFI.modulemap"; do
+    if [[ -f "${candidate}" ]]; then
+        MODULEMAP="${candidate}"
+        break
+    fi
+done
+
+if [[ -z "${HEADER}" || -z "${MODULEMAP}" ]]; then
+    echo "Error: expected UniFFI header/modulemap not found in ${BINDGEN_OUT}"
+    echo "       looked for arcadia_coreFFI.{h,modulemap} and arcadia_coreCFFI.{h,modulemap}"
+    exit 1
+fi
 
 for DIR in "${DEVICE_DIR}" "${SIM_DIR}"; do
-    cp "${HEADER}"    "${DIR}/Headers/arcadia_coreCFFI.h"
+    cp "${HEADER}"    "${DIR}/Headers/$(basename "${HEADER}")"
     cp "${MODULEMAP}" "${DIR}/Modules/module.modulemap"
 done
 

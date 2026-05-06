@@ -1,6 +1,7 @@
 pub mod config;
-pub mod modules;
-pub mod platform;
 mod ffi;
+pub mod modules;
+pub mod navigation;
+pub mod platform;
 
 uniffi::setup_scaffolding!();

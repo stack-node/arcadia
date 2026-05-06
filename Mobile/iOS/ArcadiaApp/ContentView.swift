@@ -1,36 +1,85 @@
 import SwiftUI
+import UIKit
 
-struct SidebarItem: Identifiable, Hashable {
-    let id = UUID()
+struct PageDefinition: Identifiable, Decodable {
+    let id: String
     let title: String
+    let description: String
+    let glyph: String
     let systemImage: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case description
+        case glyph
+        case systemImage = "system_image"
+    }
+}
+
+struct GroupDefinition: Identifiable, Decodable {
+    let id: String
+    let label: String
+    let glyph: String
+    let systemImage: String
+    let pageIDs: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case label
+        case glyph
+        case systemImage = "system_image"
+        case pageIDs = "pages"
+    }
+}
+
+struct NavigationRegistry: Decodable {
+    let pages: [PageDefinition]
+    let groups: [GroupDefinition]
+    let globalPages: [String]
+    let defaultGroup: String
+    let defaultPage: String
+
+    enum CodingKeys: String, CodingKey {
+        case pages
+        case groups
+        case globalPages = "global_pages"
+        case defaultGroup = "default_group"
+        case defaultPage = "default_page"
+    }
 }
 
 struct ContentView: View {
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.colorScheme) private var colorScheme
 
-    private let sidebarItems = [
-        SidebarItem(title: "Dashboard", systemImage: "square.grid.2x2"),
-        SidebarItem(title: "Shell", systemImage: "terminal"),
-        SidebarItem(title: "Modules", systemImage: "switch.2"),
-        SidebarItem(title: "Settings", systemImage: "gearshape")
-    ]
+    private let sidebarWidth: CGFloat = 292
+    private let sidebarSwipeThreshold: CGFloat = 80
+
+    private let registry: NavigationRegistry
 
     @State private var isSidebarOpen = true
-    @State private var selectedItemTitle = "Dashboard"
-    @State private var coreRuntimeEnabled = true
-    @State private var commandRouterEnabled = true
-    @State private var remoteBridgeEnabled = false
-    @State private var telemetryEnabled = false
-    @State private var safeguardsEnabled = true
-    @State private var autoUpdatesEnabled = true
-    @State private var selectedEnvironment = "Production"
+    @State private var activeGroupID: String
+    @State private var activePageID: String
+    @State private var sidebarDragOffset: CGFloat = 0
+    @State private var modules: [ModuleStatus] = []
+    @State private var pendingModuleEnable: (name: String, probe: ModuleToggleResult)?
+    @State private var showRequirementsPrompt = false
+    @State private var shellCommandInput = "echo hello"
+    @State private var shellHistory: [String] = ["Arcadia Terminal ready."]
+
+    init() {
+        let loadedRegistry = Self.loadNavigationRegistry()
+        self.registry = loadedRegistry
+        _activeGroupID = State(initialValue: loadedRegistry.defaultGroup)
+        _activePageID = State(initialValue: loadedRegistry.defaultPage)
+    }
 
     var body: some View {
         ZStack(alignment: .leading) {
             glassBackground
 
             mainContent
+                .simultaneousGesture(closeSidebarGesture)
                 .overlay {
                     if isSidebarOpen {
                         Rectangle()
@@ -47,38 +96,258 @@ struct ContentView: View {
                 }
 
             sidebar
-                .offset(x: isSidebarOpen ? 0 : -300)
+                .offset(x: sidebarOffset)
+                .gesture(closeSidebarGesture)
+
+            if !isSidebarOpen {
+                edgeSwipeHandle
+            }
         }
-        .preferredColorScheme(.dark)
         .animation(.spring(response: 0.42, dampingFraction: 0.88), value: isSidebarOpen)
+        .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9), value: sidebarDragOffset)
+        .onAppear {
+            reloadModules()
+        }
+        .onChange(of: isSidebarOpen) { open in
+            if open {
+                dismissKeyboard()
+            }
+        }
+        .alert("Enable with requirements?", isPresented: $showRequirementsPrompt, presenting: pendingModuleEnable) { pending in
+            Button("Cancel", role: .cancel) {
+                pendingModuleEnable = nil
+            }
+            Button("Enable") {
+                _ = setModuleEnabledWithRequirements(name: pending.name, enabled: true)
+                pendingModuleEnable = nil
+                reloadModules()
+            }
+        } message: { pending in
+            Text("To enable \(pending.name), Arcadia needs to enable: \(pending.probe.missingRequirements.joined(separator: ", ")). Continue with --requirements?")
+        }
+    }
+
+    private var sidebarOffset: CGFloat {
+        if isSidebarOpen {
+            return min(0, sidebarDragOffset)
+        }
+        return max(-sidebarWidth, -sidebarWidth + max(0, sidebarDragOffset))
+    }
+
+    private var closeSidebarGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard isSidebarOpen else { return }
+                sidebarDragOffset = min(0, value.translation.width)
+            }
+            .onEnded { value in
+                guard isSidebarOpen else { return }
+                let closingSwipe = value.translation.width < -sidebarSwipeThreshold
+                    || value.predictedEndTranslation.width < -sidebarSwipeThreshold
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+                    isSidebarOpen = !closingSwipe
+                    sidebarDragOffset = 0
+                }
+            }
+    }
+
+    private var openSidebarGesture: some Gesture {
+        DragGesture(minimumDistance: 12)
+            .onChanged { value in
+                guard !isSidebarOpen else { return }
+                sidebarDragOffset = max(0, value.translation.width)
+            }
+            .onEnded { value in
+                guard !isSidebarOpen else { return }
+                let openingSwipe = value.translation.width > sidebarSwipeThreshold
+                    || value.predictedEndTranslation.width > sidebarSwipeThreshold
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.88)) {
+                    isSidebarOpen = openingSwipe
+                    sidebarDragOffset = 0
+                }
+            }
+    }
+
+    private var edgeSwipeHandle: some View {
+        Rectangle()
+            .fill(.clear)
+            .frame(width: 24)
+            .contentShape(Rectangle())
+            .ignoresSafeArea()
+            .gesture(openSidebarGesture)
+    }
+
+    private var activePage: PageDefinition {
+        if isPageVisible(activePageID), let page = registry.pages.first(where: { $0.id == activePageID }) {
+            return page
+        }
+        if let firstVisible = registry.pages.first(where: { isPageVisible($0.id) }) {
+            return firstVisible
+        }
+        return registry.pages[0]
+    }
+
+    private var activeGroup: GroupDefinition {
+        if let group = visibleGroups.first(where: { $0.id == activeGroupID }) {
+            return group
+        }
+        return visibleGroups.first ?? registry.groups[0]
+    }
+
+    private var activeGroupPages: [PageDefinition] {
+        activeGroup.pageIDs.filter { isPageVisible($0) }.compactMap(pageDefinition)
+    }
+
+    private var shellEnabled: Bool {
+        modules.first(where: { $0.name == "shell" })?.enabled ?? false
+    }
+
+    private var visibleGroups: [GroupDefinition] {
+        registry.groups.filter { group in
+            group.pageIDs.contains { isPageVisible($0) }
+        }
+    }
+
+    private func pageDefinition(_ pageID: String) -> PageDefinition? {
+        registry.pages.first(where: { $0.id == pageID })
+    }
+
+    private func isPageVisible(_ pageID: String) -> Bool {
+        if pageID == "utility.shell" {
+            return shellEnabled
+        }
+        return true
+    }
+
+    private func selectGroup(_ groupID: String) {
+        activeGroupID = groupID
+        if let group = visibleGroups.first(where: { $0.id == groupID }),
+           let firstPageID = group.pageIDs.first(where: { isPageVisible($0) }) {
+            activePageID = firstPageID
+        }
+    }
+
+    private func selectPage(_ pageID: String) {
+        activePageID = pageID
+        if pageID == "global.modules" {
+            reloadModules()
+        }
+    }
+
+    private static func loadNavigationRegistry() -> NavigationRegistry {
+        let fallback = NavigationRegistry(
+            pages: [
+                PageDefinition(id: "utility.shell", title: "Shell", description: "Run and manage shell utility actions.", glyph: "SH", systemImage: "terminal"),
+                PageDefinition(id: "global.dashboard", title: "Dashboard", description: "Overview of the Arcadia application surface.", glyph: "DH", systemImage: "house"),
+                PageDefinition(id: "global.logs", title: "Logs", description: "Recent logs and activity stream appear here.", glyph: "LG", systemImage: "doc.text.magnifyingglass"),
+                PageDefinition(id: "global.settings", title: "Settings", description: "App preferences and configuration controls appear here.", glyph: "ST", systemImage: "gearshape")
+                ,
+                PageDefinition(id: "global.modules", title: "Modules", description: "Manage global module availability and dependency requirements.", glyph: "MD", systemImage: "switch.2")
+            ],
+            groups: [
+                GroupDefinition(id: "utilities", label: "Utilities", glyph: "UT", systemImage: "wrench.and.screwdriver", pageIDs: ["utility.shell"])
+            ],
+            globalPages: ["global.dashboard", "global.logs", "global.settings", "global.modules"],
+            defaultGroup: "utilities",
+            defaultPage: "global.dashboard"
+        )
+
+        let payload = navigationRegistryJson()
+        guard let data = payload.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(NavigationRegistry.self, from: data),
+              !decoded.pages.isEmpty,
+              !decoded.groups.isEmpty else {
+            return fallback
+        }
+        return decoded
+    }
+
+    private var isDarkMode: Bool {
+        colorScheme == .dark
+    }
+
+    private var primaryTextColor: Color {
+        isDarkMode ? .white : Color.black.opacity(0.85)
+    }
+
+    private var secondaryTextColor: Color {
+        isDarkMode ? .white.opacity(0.72) : Color.black.opacity(0.62)
+    }
+
+    private var tertiaryTextColor: Color {
+        isDarkMode ? .white.opacity(0.54) : Color.black.opacity(0.5)
+    }
+
+    private var accentTextColor: Color {
+        isDarkMode ? .white.opacity(0.92) : Color.black.opacity(0.82)
+    }
+
+    private var selectedTextColor: Color {
+        isDarkMode ? .white : Color.black.opacity(0.88)
+    }
+
+    private var cardFillColor: Color {
+        isDarkMode ? .white.opacity(0.08) : .white.opacity(0.72)
+    }
+
+    private var cardStrokeColor: Color {
+        isDarkMode ? .white.opacity(0.14) : Color.black.opacity(0.1)
+    }
+
+    private var selectedFillColor: Color {
+        isDarkMode ? .white.opacity(0.12) : Color.black.opacity(0.08)
+    }
+
+    private var selectedStrokeColor: Color {
+        isDarkMode ? .white.opacity(0.18) : Color.black.opacity(0.16)
+    }
+
+    private var sidebarShadowColor: Color {
+        isDarkMode ? .black.opacity(0.28) : .black.opacity(0.12)
+    }
+
+    private var contentShadowColor: Color {
+        isDarkMode ? .black.opacity(0.22) : .black.opacity(0.08)
     }
 
     private var glassBackground: some View {
         ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 0.05, green: 0.08, blue: 0.16),
-                    Color(red: 0.07, green: 0.14, blue: 0.25),
-                    Color(red: 0.03, green: 0.06, blue: 0.12)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            if isDarkMode {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.05, green: 0.08, blue: 0.16),
+                        Color(red: 0.07, green: 0.14, blue: 0.25),
+                        Color(red: 0.03, green: 0.06, blue: 0.12)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.95, green: 0.97, blue: 1.0),
+                        Color(red: 0.92, green: 0.96, blue: 0.99),
+                        Color(red: 0.97, green: 0.98, blue: 1.0)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
 
             Circle()
-                .fill(Color.white.opacity(0.18))
+                .fill(isDarkMode ? Color.white.opacity(0.18) : Color.white.opacity(0.6))
                 .frame(width: 320)
                 .blur(radius: 70)
                 .offset(x: -120, y: -250)
 
             Circle()
-                .fill(Color.cyan.opacity(0.16))
+                .fill(isDarkMode ? Color.cyan.opacity(0.16) : Color.cyan.opacity(0.2))
                 .frame(width: 360)
                 .blur(radius: 90)
                 .offset(x: 150, y: -160)
 
             Circle()
-                .fill(Color.blue.opacity(0.22))
+                .fill(isDarkMode ? Color.blue.opacity(0.22) : Color.blue.opacity(0.16))
                 .frame(width: 380)
                 .blur(radius: 110)
                 .offset(x: 130, y: 260)
@@ -89,29 +358,31 @@ struct ContentView: View {
     private var mainContent: some View {
         NavigationStack {
             VStack(alignment: .leading, spacing: 24) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(selectedItemTitle)
-                            .font(.system(size: 40, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
+                if activePage.id != "utility.shell" {
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(activePage.title)
+                                .font(.system(size: 40, weight: .semibold, design: .rounded))
+                                .foregroundStyle(primaryTextColor)
 
-                        Text("A liquid glass shell with translucent navigation and polished placeholder surfaces.")
-                            .font(.body)
-                            .foregroundStyle(.white.opacity(0.72))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: sidebarSymbol)
-                        .font(.system(size: 28, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.86))
-                        .frame(width: 58, height: 58)
-                        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .stroke(.white.opacity(0.14), lineWidth: 1)
+                            Text(activePage.description)
+                                .font(.body)
+                                .foregroundStyle(secondaryTextColor)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
+
+                        Spacer()
+
+                        Image(systemName: sidebarSymbol)
+                            .font(.system(size: 28, weight: .medium))
+                            .foregroundStyle(accentTextColor)
+                            .frame(width: 58, height: 58)
+                            .background(cardFillColor, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .stroke(cardStrokeColor, lineWidth: 1)
+                            }
+                    }
                 }
 
                 contentBody
@@ -122,16 +393,16 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background {
                 RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .fill(.white.opacity(0.08))
+                    .fill(cardFillColor)
                     .background(
                         RoundedRectangle(cornerRadius: 30, style: .continuous)
                             .fill(.ultraThinMaterial)
                     )
                     .overlay {
                         RoundedRectangle(cornerRadius: 30, style: .continuous)
-                            .stroke(.white.opacity(0.16), lineWidth: 1)
+                            .stroke(cardStrokeColor, lineWidth: 1)
                     }
-                    .shadow(color: .black.opacity(0.22), radius: 40, x: 0, y: 18)
+                    .shadow(color: contentShadowColor, radius: 40, x: 0, y: 18)
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 10)
@@ -144,18 +415,18 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: "sidebar.leading")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.92))
+                            .foregroundStyle(accentTextColor)
                             .frame(width: 52, height: 52)
                             .background(.ultraThinMaterial, in: Circle())
                             .overlay {
                                 Circle()
-                                    .fill(.white.opacity(0.04))
+                                    .fill(isDarkMode ? .white.opacity(0.04) : .white.opacity(0.35))
                             }
                             .overlay {
                                 Circle()
-                                    .stroke(.white.opacity(0.08), lineWidth: 1)
+                                    .stroke(cardStrokeColor, lineWidth: 1)
                             }
-                            .shadow(color: .black.opacity(0.18), radius: 14, x: 0, y: 8)
+                            .shadow(color: contentShadowColor, radius: 14, x: 0, y: 8)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(isSidebarOpen ? "Close sidebar" : "Open sidebar")
@@ -170,212 +441,258 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Arcadia")
                     .font(.system(size: 28, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(primaryTextColor)
 
                 Text("Liquid glass")
                     .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.64))
+                    .foregroundStyle(secondaryTextColor)
             }
             .padding(.horizontal, 22)
             .padding(.top, 28)
             .padding(.bottom, 10)
 
-            ForEach(sidebarItems) { item in
-                Button {
-                    selectedItemTitle = item.title
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: item.systemImage)
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(width: 20)
-                        Text(item.title)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .font(.body.weight(selectedItemTitle == item.title ? .semibold : .medium))
-                    .foregroundStyle(selectedItemTitle == item.title ? .white : .white.opacity(0.78))
-                    .padding(.horizontal, 16)
-                    .frame(height: 50)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(selectedItemTitle == item.title ? .white.opacity(0.12) : .clear)
-                    )
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(selectedItemTitle == item.title ? .white.opacity(0.18) : .clear, lineWidth: 1)
+            Text("Groups")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tertiaryTextColor)
+                .padding(.horizontal, 16)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(visibleGroups) { group in
+                        Button {
+                            selectGroup(group.id)
+                        } label: {
+                            VStack(spacing: 6) {
+                                Image(systemName: group.systemImage)
+                                    .font(.system(size: 14, weight: .semibold))
+                                Text(group.label)
+                            }
+                                .font(.caption.weight(activeGroupID == group.id ? .semibold : .medium))
+                                .foregroundStyle(activeGroupID == group.id ? selectedTextColor : secondaryTextColor)
+                                .frame(width: 64, height: 64)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(activeGroupID == group.id ? selectedFillColor : .clear)
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(activeGroupID == group.id ? selectedStrokeColor : .clear, lineWidth: 1)
+                                }
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .buttonStyle(.plain)
                 .padding(.horizontal, 14)
             }
 
-            Spacer()
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(activeGroup.label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(tertiaryTextColor)
+                        .padding(.top, 2)
+                        .padding(.horizontal, 16)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Ambient")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.54))
+                    ForEach(activeGroupPages) { page in
+                        pageButton(page: page)
+                    }
+                }
+                .padding(.bottom, 8)
+            }
+            .frame(maxHeight: .infinity)
 
-                Text("A minimal app shell ready for real navigation.")
-                    .font(.footnote)
-                    .foregroundStyle(.white.opacity(0.72))
+            Text("Global")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(tertiaryTextColor)
+                .padding(.horizontal, 16)
+
+            ForEach(registry.globalPages, id: \.self) { pageID in
+                if let page = pageDefinition(pageID) {
+                    pageButton(page: page)
+                }
             }
-            .padding(18)
-            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(.white.opacity(0.12), lineWidth: 1)
-            }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 26)
+            .padding(.bottom, 14)
         }
-        .frame(width: 292)
+        .frame(width: sidebarWidth)
         .frame(maxHeight: .infinity, alignment: .topLeading)
         .background(.ultraThinMaterial)
-        .background(.white.opacity(0.05))
+        .background(isDarkMode ? .white.opacity(0.05) : .white.opacity(0.3))
         .overlay {
             RoundedRectangle(cornerRadius: 0)
-                .stroke(.white.opacity(0.1), lineWidth: 1)
+                .stroke(cardStrokeColor, lineWidth: 1)
         }
-        .shadow(color: .black.opacity(0.28), radius: 28, x: 8, y: 0)
+        .shadow(color: sidebarShadowColor, radius: 28, x: 8, y: 0)
         .ignoresSafeArea()
     }
 
     private var sidebarSymbol: String {
-        sidebarItems.first(where: { $0.title == selectedItemTitle })?.systemImage ?? "square.grid.2x2"
+        activePage.systemImage
     }
 
-    @ViewBuilder
     private var contentBody: some View {
-        if selectedItemTitle == "Modules" {
-            modulesPage
-        } else {
-            VStack(spacing: 16) {
+        VStack(spacing: 16) {
+            if activePage.id == "global.modules" {
+                modulesCard
+            } else if activePage.id == "utility.shell" {
+                shellCard
+            } else {
                 glassCard(
                     title: "Primary Surface",
-                    subtitle: "Use this area for the first real destination you add."
+                    subtitle: "This page is rendered from shared page definitions."
                 )
 
                 HStack(spacing: 16) {
                     glassMetric(title: "Sidebar", value: isSidebarOpen ? "Open" : "Closed")
-                    glassMetric(title: "Selection", value: selectedItemTitle)
+                    glassMetric(title: "Selection", value: activePage.title)
                 }
             }
         }
     }
 
-    private var modulesPage: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 16) {
-                if isCompactLayout {
-                    VStack(spacing: 16) {
-                        glassMetric(title: "Active", value: "\(activeModuleCount)")
-                        glassMetric(title: "Environment", value: selectedEnvironment)
-                    }
-                } else {
-                    HStack(spacing: 16) {
-                        glassMetric(title: "Active", value: "\(activeModuleCount)")
-                        glassMetric(title: "Environment", value: selectedEnvironment)
-                    }
+    private var shellCard: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Terminal")
+                    .font(.headline)
+                    .foregroundStyle(primaryTextColor)
+                Spacer()
+                Button("Clear") {
+                    shellHistory.removeAll()
                 }
-
-                glassCard(title: "Runtime Modules", subtitle: "Separate core services from optional integrations and make state obvious.") {
-                    VStack(spacing: 12) {
-                        moduleRow(
-                            title: "Core Runtime",
-                            subtitle: "Required for local orchestration and state management.",
-                            isOn: $coreRuntimeEnabled,
-                            accent: .cyan
-                        )
-                        moduleRow(
-                            title: "Command Router",
-                            subtitle: "Dispatches actions between shell, modules, and system tools.",
-                            isOn: $commandRouterEnabled,
-                            accent: .blue
-                        )
-                        moduleRow(
-                            title: "Remote Bridge",
-                            subtitle: "Allows outbound connections to paired services and agents.",
-                            isOn: $remoteBridgeEnabled,
-                            accent: .mint
-                        )
-                    }
-                }
-
-                if isCompactLayout {
-                    VStack(spacing: 16) {
-                        safetyCard
-                        releaseChannelCard
-                    }
-                } else {
-                    HStack(alignment: .top, spacing: 16) {
-                        safetyCard
-                        releaseChannelCard
-                    }
-                }
+                .buttonStyle(.bordered)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 8)
+            .padding(12)
+            .background(cardFillColor)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(shellHistory.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(accentTextColor)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(12)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            HStack(spacing: 8) {
+                Text("$")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(secondaryTextColor)
+                TextField("Type a command", text: $shellCommandInput)
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(primaryTextColor)
+                    .onSubmit { runShellCommand() }
+                Button("Run") { runShellCommand() }
+                    .buttonStyle(.borderedProminent)
+            }
+            .padding(12)
+            .background(cardFillColor)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(cardFillColor, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(cardStrokeColor, lineWidth: 1)
+        }
     }
 
-    private var activeModuleCount: Int {
-        [
-            coreRuntimeEnabled,
-            commandRouterEnabled,
-            remoteBridgeEnabled,
-            telemetryEnabled,
-            safeguardsEnabled,
-            autoUpdatesEnabled
-        ].filter { $0 }.count
-    }
-
-    private var isCompactLayout: Bool {
-        horizontalSizeClass != .regular
-    }
-
-    private var safetyCard: some View {
-        glassCard(title: "Safety", subtitle: "High-risk capabilities should have explicit switches.") {
-            VStack(spacing: 12) {
-                moduleRow(
-                    title: "Safeguards",
-                    subtitle: "Blocks destructive operations until they are explicitly allowed.",
-                    isOn: $safeguardsEnabled,
-                    accent: .green
-                )
-                moduleRow(
-                    title: "Telemetry",
-                    subtitle: "Collects session diagnostics and performance traces.",
-                    isOn: $telemetryEnabled,
-                    accent: .orange
-                )
+    private var modulesCard: some View {
+        glassCard(title: "Global Modules", subtitle: "Enable or disable modules for all surfaces.") {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(modules, id: \.name) { module in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(module.name)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(primaryTextColor)
+                            Text(module.enabled ? "Enabled" : "Disabled")
+                                .font(.caption)
+                                .foregroundStyle(secondaryTextColor)
+                        }
+                        Spacer()
+                        Toggle("", isOn: Binding(
+                            get: { module.enabled },
+                            set: { newValue in
+                                updateModule(name: module.name, enabled: newValue)
+                            }
+                        ))
+                        .labelsHidden()
+                    }
+                    .padding(.vertical, 6)
+                }
             }
         }
     }
 
-    private var releaseChannelCard: some View {
-        glassCard(title: "Release Channel", subtitle: "Pick where modules resolve from and how they update.") {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker("Environment", selection: $selectedEnvironment) {
-                    Text("Prod").tag("Production")
-                    Text("Stage").tag("Staging")
-                    Text("Local").tag("Local")
-                }
-                .pickerStyle(.segmented)
+    private func reloadModules() {
+        modules = listModules().sorted { $0.name < $1.name }
+    }
 
-                Toggle(isOn: $autoUpdatesEnabled) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Automatic updates")
-                            .foregroundStyle(.white)
-                        Text("Refresh module manifests and compatibility rules.")
-                            .font(.footnote)
-                            .foregroundStyle(.white.opacity(0.68))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .tint(.white.opacity(0.9))
+    private func updateModule(name: String, enabled: Bool) {
+        if enabled {
+            let probe = probeModuleToggle(name: name, enabled: true)
+            if !probe.ok && !probe.missingRequirements.isEmpty {
+                pendingModuleEnable = (name: name, probe: probe)
+                showRequirementsPrompt = true
+                reloadModules()
+                return
             }
         }
+        _ = setModuleEnabled(name: name, enabled: enabled)
+        reloadModules()
+    }
+
+    private func runShellCommand() {
+        let trimmed = shellCommandInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+        let args = trimmed.split(separator: " ").map(String.init)
+        shellHistory.append("$ \(trimmed)")
+        let output = executeCommand(
+            token: "shell.execute",
+            args: args,
+            context: ExecutionContextFfi(netAs: nil, netTimeoutMs: nil)
+        )
+        shellHistory.append(contentsOf: output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
+        shellHistory.append("")
+    }
+
+    private func dismissKeyboard() {
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    private func pageButton(page: PageDefinition) -> some View {
+        Button {
+            selectPage(page.id)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: page.systemImage)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(width: 20)
+                Text(page.title)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.body.weight(activePageID == page.id ? .semibold : .medium))
+            .foregroundStyle(activePageID == page.id ? selectedTextColor : secondaryTextColor)
+            .padding(.horizontal, 16)
+            .frame(height: 50)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(activePageID == page.id ? selectedFillColor : .clear)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(activePageID == page.id ? selectedStrokeColor : .clear, lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
     }
 
     private func glassCard(title: String, subtitle: String) -> some View {
@@ -388,52 +705,20 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryTextColor)
 
             Text(subtitle)
                 .font(.subheadline)
-                .foregroundStyle(.white.opacity(0.72))
+                .foregroundStyle(secondaryTextColor)
 
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(cardFillColor, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(.white.opacity(0.14), lineWidth: 1)
-        }
-    }
-
-    private func moduleRow(title: String, subtitle: String, isOn: Binding<Bool>, accent: Color) -> some View {
-        HStack(alignment: .center, spacing: 14) {
-            Circle()
-                .fill(accent.opacity(isOn.wrappedValue ? 0.95 : 0.35))
-                .frame(width: 10, height: 10)
-                .shadow(color: accent.opacity(isOn.wrappedValue ? 0.6 : 0), radius: 8)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title)
-                    .foregroundStyle(.white)
-                    .font(.body.weight(.semibold))
-
-                Text(subtitle)
-                    .foregroundStyle(.white.opacity(0.68))
-                    .font(.footnote)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Spacer(minLength: 12)
-
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-                .tint(.white.opacity(0.92))
-        }
-        .padding(14)
-        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(.white.opacity(0.08), lineWidth: 1)
+                .stroke(cardStrokeColor, lineWidth: 1)
         }
     }
 
@@ -441,20 +726,20 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
                 .font(.caption.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.52))
+                .foregroundStyle(tertiaryTextColor)
 
             Text(value)
                 .font(.title3.weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryTextColor)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, minHeight: 108, alignment: .topLeading)
         .padding(18)
-        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(cardFillColor, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(.white.opacity(0.14), lineWidth: 1)
+                .stroke(cardStrokeColor, lineWidth: 1)
         }
     }
 }

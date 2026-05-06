@@ -2,6 +2,30 @@ use crate::modules::{ExecutionContext, ModuleCommand};
 
 pub const NAME: &str = "shell";
 
+fn strip_ansi_sequences(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        // Drop ANSI CSI sequences: ESC [ ... final-byte.
+        if bytes[i] == 0x1B && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            i += 2;
+            while i < bytes.len() {
+                let b = bytes[i];
+                if (0x40..=0x7E).contains(&b) {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
+
 fn execute(args: &[&str], context: &ExecutionContext) -> String {
     if args.is_empty() {
         return "Usage: shell.execute <command...>".to_string();
@@ -31,15 +55,21 @@ fn execute(args: &[&str], context: &ExecutionContext) -> String {
 
         match output {
             Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let stdout = strip_ansi_sequences(&String::from_utf8_lossy(&output.stdout));
+                let stderr = strip_ansi_sequences(&String::from_utf8_lossy(&output.stderr));
                 let mut lines = Vec::new();
-                lines.push(format!("exit: {:?}", output.status.code()));
                 if !stdout.is_empty() {
-                    lines.push(format!("stdout:\n{stdout}"));
+                    lines.push(stdout);
                 }
                 if !stderr.is_empty() {
-                    lines.push(format!("stderr:\n{stderr}"));
+                    lines.push(stderr);
+                }
+                if !output.status.success() {
+                    if let Some(code) = output.status.code() {
+                        lines.push(format!("(exit code: {code})"));
+                    } else {
+                        lines.push("(process terminated by signal)".to_string());
+                    }
                 }
                 lines.join("\n")
             }

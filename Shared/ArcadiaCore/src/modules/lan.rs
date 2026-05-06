@@ -8,10 +8,10 @@ use std::sync::{Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
-use crate::config::modules::{LAN_MODULE_NAME, ModulesConfig};
+use crate::config::modules::{ModulesConfig, LAN_MODULE_NAME};
 use crate::config::ConfigFile;
 use crate::modules::{ExecutionContext, ModuleCommand};
+use serde::{Deserialize, Serialize};
 
 const DISCOVERY_PORT: u16 = 46291;
 const DISCOVERY_REQUEST: &str = "ARCADIA_LAN_DISCOVER_V1";
@@ -181,7 +181,10 @@ fn is_identifier_approved(cfg: &LanNodeConfig, ip: &str, hostname: &str) -> bool
 
 fn match_peer_key(identifier: &str, peers: &BTreeMap<String, PeerRecord>) -> Option<String> {
     let key = normalize_node_identifier(identifier);
-    if let Some((ip, _)) = peers.iter().find(|(ip, _)| normalize_node_identifier(ip) == key) {
+    if let Some((ip, _)) = peers
+        .iter()
+        .find(|(ip, _)| normalize_node_identifier(ip) == key)
+    {
         return Some(ip.clone());
     }
     peers
@@ -479,7 +482,10 @@ pub fn execute_remote_command(
     }
 
     socket
-        .send_to(payload.as_bytes(), SocketAddrV4::new(*addr.ip(), DISCOVERY_PORT))
+        .send_to(
+            payload.as_bytes(),
+            SocketAddrV4::new(*addr.ip(), DISCOVERY_PORT),
+        )
         .map_err(|err| format!("Failed to send remote command: {err}"))?;
 
     let mut buf = [0_u8; 65_507];
@@ -533,7 +539,10 @@ fn node_accept(target: &str) -> String {
         let Some(peer) = guard.peers.get_mut(&key) else {
             return format!("No known peer matching {target}");
         };
-        if !matches!(peer.status, PeerStatus::PendingInbound | PeerStatus::PendingOutbound) {
+        if !matches!(
+            peer.status,
+            PeerStatus::PendingInbound | PeerStatus::PendingOutbound
+        ) {
             return format!("Peer {} is already {}", peer.ip, peer.status.as_str());
         }
         peer.status = PeerStatus::Connected;
@@ -568,7 +577,12 @@ fn node_status(target: Option<&str>) -> String {
         let peer = &guard.peers[&key];
         let aliases = aliases_for_identifier(&peer.ip, &cfg);
         if aliases.is_empty() {
-            return format!("{} ({}) -> {}", peer.hostname, peer.ip, peer.status.as_str());
+            return format!(
+                "{} ({}) -> {}",
+                peer.hostname,
+                peer.ip,
+                peer.status.as_str()
+            );
         }
         return format!(
             "{} ({}) [{}] -> {}",

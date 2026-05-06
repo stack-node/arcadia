@@ -1,9 +1,6 @@
 name: Stable Build Matrix
 
 on:
-  push:
-    branches:
-      - stable
   pull_request:
     branches:
       - stable

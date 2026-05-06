@@ -79,7 +79,10 @@ pub fn enabled_module_command_names(module_name: &str) -> Vec<String> {
     let Some(commands) = module_commands(module_name) else {
         return Vec::new();
     };
-    commands.iter().map(|command| command.name.to_string()).collect()
+    commands
+        .iter()
+        .map(|command| command.name.to_string())
+        .collect()
 }
 
 pub fn execute_command(
@@ -111,7 +114,8 @@ pub fn execute_command(
 
     if let Some(route) = &context.net_as {
         if let Some(target) = route.strip_prefix("lan:") {
-            let response = lan::execute_remote_command(target, token, args, context.net_timeout_ms)?;
+            let response =
+                lan::execute_remote_command(target, token, args, context.net_timeout_ms)?;
             return Ok(Some(response));
         }
         return Err(format!("Unsupported net route: {route}"));
