@@ -6,15 +6,44 @@ use crate::config::ConfigFile;
 const LEGACY_LAN_MODULE_NAME: &str = "lan-module";
 pub const LAN_MODULE_NAME: &str = "lan";
 pub const NET_MODULE_NAME: &str = "net";
+pub const REMOTE_SESSION_MODULE_NAME: &str = "remote-session";
 pub const SHELL_MODULE_NAME: &str = "shell";
 const FILE_NAME: &str = "modules.toml";
 
-// Single source of truth for modules. To add a module: one entry here.
-// Format: (module_name, required_deps[])
-static MODULE_REGISTRY: &[(&str, &[&str])] = &[
-    (LAN_MODULE_NAME, &[NET_MODULE_NAME]),
-    (NET_MODULE_NAME, &[]),
-    (SHELL_MODULE_NAME, &[]),
+#[derive(Debug, Clone, Copy)]
+pub struct ModuleManifest {
+    pub name: &'static str,
+    pub version: &'static str,
+    pub description: &'static str,
+    pub required_modules: &'static [&'static str],
+}
+
+// Single source of truth for modules and their metadata.
+static MODULE_REGISTRY: &[ModuleManifest] = &[
+    ModuleManifest {
+        name: LAN_MODULE_NAME,
+        version: "1.0.0",
+        description: "Local network discovery and peer communication.",
+        required_modules: &[NET_MODULE_NAME],
+    },
+    ModuleManifest {
+        name: NET_MODULE_NAME,
+        version: "1.0.0",
+        description: "Shared networking foundation for routed module commands.",
+        required_modules: &[],
+    },
+    ModuleManifest {
+        name: REMOTE_SESSION_MODULE_NAME,
+        version: "0.1.0",
+        description: "Placeholder for upcoming remote interactive session support.",
+        required_modules: &[NET_MODULE_NAME],
+    },
+    ModuleManifest {
+        name: SHELL_MODULE_NAME,
+        version: "1.0.0",
+        description: "Interactive shell command execution for Arcadia surfaces.",
+        required_modules: &[],
+    },
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,26 +54,32 @@ pub struct ModulesConfig {
 fn required_modules(module_name: &str) -> &'static [&'static str] {
     MODULE_REGISTRY
         .iter()
-        .find(|(name, _)| *name == module_name)
-        .map(|(_, deps)| *deps)
+        .find(|manifest| manifest.name == module_name)
+        .map(|manifest| manifest.required_modules)
         .unwrap_or(&[])
 }
 
 fn is_known_module(module_name: &str) -> bool {
-    MODULE_REGISTRY.iter().any(|(name, _)| *name == module_name)
+    MODULE_REGISTRY.iter().any(|manifest| manifest.name == module_name)
 }
 
 impl Default for ModulesConfig {
     fn default() -> Self {
         let modules = MODULE_REGISTRY
             .iter()
-            .map(|(name, _)| ((*name).to_string(), false))
+            .map(|manifest| (manifest.name.to_string(), false))
             .collect();
         Self { modules }
     }
 }
 
 impl ModulesConfig {
+    pub fn manifest_for(module_name: &str) -> Option<&'static ModuleManifest> {
+        MODULE_REGISTRY
+            .iter()
+            .find(|manifest| manifest.name == module_name)
+    }
+
     pub fn required_modules_for(module_name: &str) -> Result<&'static [&'static str], String> {
         if is_known_module(module_name) {
             Ok(required_modules(module_name))

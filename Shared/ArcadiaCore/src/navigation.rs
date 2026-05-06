@@ -63,6 +63,13 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         glyph: "modules",
         system_image: "switch.2",
     },
+    NavigationPageDefinition {
+        id: "network.overview",
+        title: "Overview",
+        description: "Network status and module connectivity overview.",
+        glyph: "logs",
+        system_image: "network",
+    },
 ];
 
 pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
@@ -72,6 +79,13 @@ pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
         glyph: "tools",
         system_image: "wrench.and.screwdriver",
         pages: &["utility.shell"],
+    },
+    NavigationGroupDefinition {
+        id: "network",
+        label: "Network",
+        glyph: "logs",
+        system_image: "network",
+        pages: &["network.overview"],
     },
 ];
 

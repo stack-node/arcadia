@@ -8,6 +8,8 @@ struct SidebarView: View {
     let sidebarWidth: CGFloat
     let sidebarSwipeThreshold: CGFloat
     let shellEnabled: Bool
+    let netEnabled: Bool
+    let remoteSessionEnabled: Bool
 
     @Binding var activeGroupID: String
     @Binding var activePageID: String
@@ -31,7 +33,14 @@ struct SidebarView: View {
     }
 
     private func isPageVisible(_ pageID: String) -> Bool {
-        pageID == "utility.shell" ? shellEnabled : true
+        switch pageID {
+        case "utility.shell":
+            return shellEnabled
+        case "network.overview":
+            return netEnabled
+        default:
+            return true
+        }
     }
 
     private func selectGroup(_ groupID: String) {
@@ -48,6 +57,27 @@ struct SidebarView: View {
                 Text("Arcadia")
                     .font(.system(size: 28, weight: .semibold, design: .rounded))
                     .foregroundStyle(theme.primaryTextColor)
+
+                if remoteSessionEnabled {
+                    Menu {
+                        Button("local") {}
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text("local")
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(theme.secondaryTextColor)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(theme.cardFillColor, in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(theme.cardStrokeColor, lineWidth: 1)
+                        }
+                    }
+                }
 
                 Text("Liquid glass")
                     .font(.subheadline)

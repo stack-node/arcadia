@@ -1,6 +1,13 @@
 use crate::modules::{ExecutionContext, ModuleCommand};
+use std::sync::OnceLock;
 
 pub const NAME: &str = "shell";
+type InternalExecutor = fn(&str) -> String;
+static INTERNAL_EXECUTOR: OnceLock<InternalExecutor> = OnceLock::new();
+
+pub fn set_internal_executor(executor: InternalExecutor) {
+    let _ = INTERNAL_EXECUTOR.set(executor);
+}
 
 fn strip_ansi_sequences(input: &str) -> String {
     let bytes = input.as_bytes();
@@ -78,10 +85,29 @@ fn execute(args: &[&str], context: &ExecutionContext) -> String {
     }
 }
 
+fn internal(args: &[&str], context: &ExecutionContext) -> String {
+    if args.is_empty() {
+        return "Usage: shell.internal <command...>".to_string();
+    }
+    let _ = context;
+    let command_line = args.join(" ");
+    match INTERNAL_EXECUTOR.get() {
+        Some(executor) => executor(&command_line),
+        None => "shell.internal is not available in this runtime".to_string(),
+    }
+}
+
 pub fn commands() -> &'static [ModuleCommand] {
-    &[ModuleCommand {
-        name: "execute",
-        description: "execute shell command(s): shell.execute <command...>",
-        run: execute,
-    }]
+    &[
+        ModuleCommand {
+            name: "execute",
+            description: "execute shell command(s): shell.execute <command...>",
+            run: execute,
+        },
+        ModuleCommand {
+            name: "internal",
+            description: "execute internal CLI command(s): shell.internal <command...>",
+            run: internal,
+        },
+    ]
 }

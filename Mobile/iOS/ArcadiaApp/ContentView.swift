@@ -55,6 +55,8 @@ struct ContentView: View {
                 sidebarWidth: sidebarWidth,
                 sidebarSwipeThreshold: sidebarSwipeThreshold,
                 shellEnabled: shellEnabled,
+                netEnabled: netEnabled,
+                remoteSessionEnabled: remoteSessionEnabled,
                 activeGroupID: $activeGroupID,
                 activePageID: $activePageID
             )
@@ -156,8 +158,23 @@ struct ContentView: View {
         modules.first(where: { $0.name == "shell" })?.enabled ?? false
     }
 
+    private var remoteSessionEnabled: Bool {
+        modules.first(where: { $0.name == "remote-session" })?.enabled ?? false
+    }
+
+    private var netEnabled: Bool {
+        modules.first(where: { $0.name == "net" })?.enabled ?? false
+    }
+
     private func isPageVisible(_ pageID: String) -> Bool {
-        pageID == "utility.shell" ? shellEnabled : true
+        switch pageID {
+        case "utility.shell":
+            return shellEnabled
+        case "network.overview":
+            return netEnabled
+        default:
+            return true
+        }
     }
 
     private var activePage: PageDefinition {
@@ -370,10 +387,12 @@ struct ContentView: View {
                 PageDefinition(id: "global.dashboard", title: "Dashboard", description: "Overview of the Arcadia application surface.", glyph: "DH", systemImage: "house"),
                 PageDefinition(id: "global.logs", title: "Logs", description: "Recent logs and activity stream appear here.", glyph: "LG", systemImage: "doc.text.magnifyingglass"),
                 PageDefinition(id: "global.settings", title: "Settings", description: "App preferences and configuration controls appear here.", glyph: "ST", systemImage: "gearshape"),
-                PageDefinition(id: "global.modules", title: "Modules", description: "Manage global module availability and dependency requirements.", glyph: "MD", systemImage: "switch.2")
+                PageDefinition(id: "global.modules", title: "Modules", description: "Manage global module availability and dependency requirements.", glyph: "MD", systemImage: "switch.2"),
+                PageDefinition(id: "network.overview", title: "Overview", description: "Network status and module connectivity overview.", glyph: "NW", systemImage: "network")
             ],
             groups: [
-                GroupDefinition(id: "utilities", label: "Utilities", glyph: "UT", systemImage: "wrench.and.screwdriver", pageIDs: ["utility.shell"])
+                GroupDefinition(id: "utilities", label: "Utilities", glyph: "UT", systemImage: "wrench.and.screwdriver", pageIDs: ["utility.shell"]),
+                GroupDefinition(id: "network", label: "Network", glyph: "NW", systemImage: "network", pageIDs: ["network.overview"])
             ],
             globalPages: ["global.dashboard", "global.logs", "global.settings", "global.modules"],
             defaultGroup: "utilities",

@@ -3,6 +3,7 @@ mod completion;
 mod config_cmds;
 mod module_cmds;
 
+use std::cell::RefCell;
 use std::io::{self, Write};
 use std::sync::{OnceLock, RwLock};
 
@@ -22,6 +23,10 @@ use module_cmds::handle_module;
 pub enum CommandResult {
     Continue,
     Quit,
+}
+
+thread_local! {
+    static RESPONSE_CAPTURE: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
 }
 
 pub(super) fn settings_lock() -> &'static RwLock<CommandlineConfig> {
@@ -49,6 +54,18 @@ pub(super) fn settings() -> CommandlineConfig {
 }
 
 pub fn print_response(message: &str) {
+    let captured = RESPONSE_CAPTURE.with(|capture| {
+        let mut borrow = capture.borrow_mut();
+        if let Some(lines) = borrow.as_mut() {
+            lines.push(message.to_string());
+            true
+        } else {
+            false
+        }
+    });
+    if captured {
+        return;
+    }
     let cfg = settings();
     println!(
         "{}{}\x1b[0m {message}",
@@ -66,42 +83,6 @@ pub fn print_startup(mode: &str) {
     println!("Detected platform: {}", platform::current().name());
     println!("Mode: {mode}");
     println!("Status: bootstrap complete");
-}
-
-fn print_help() {
-    print_response("Available commands:");
-    for spec in COMMAND_SPECS {
-        match spec.name {
-            "help" => print_response("- help: show this help message"),
-            "ping" => print_response("- ping: respond with pong"),
-            "quit" => print_response("- quit: exit Arcadia"),
-            "configuration" => {
-                print_response("- configuration <name>: open config file in default editor");
-                print_response(
-                    "- configuration [show|get|set|reset] ...: manage commandline config",
-                );
-                if !spec.aliases.is_empty() {
-                    let aliases = spec.aliases.join(" -> ");
-                    print_response(&format!("- aliases: {aliases} -> configuration"));
-                }
-            }
-            "module" => {
-                print_response("- module <name> enable|disable: toggle a module");
-                print_response(
-                    "- module <name> enable -requirements: enable module and required dependencies",
-                );
-            }
-            _ => {}
-        }
-    }
-    let module_command_lines = modules::enabled_command_help_lines();
-    if !module_command_lines.is_empty() {
-        print_response("- enabled module commands:");
-        for line in module_command_lines {
-            print_response(&line);
-        }
-    }
-    print_response("- global flags: --net:as lan:<host/ip/alias> | --net:timeout <milliseconds>");
 }
 
 fn editor() -> Editor<CliHelper, DefaultHistory> {
@@ -152,6 +133,24 @@ pub fn start_loop(quit: impl FnOnce() + Copy) {
 }
 
 pub fn handle(input: &str) -> CommandResult {
+    handle_with(input, print_response)
+}
+
+pub fn handle_internal(input: &str) -> String {
+    RESPONSE_CAPTURE.with(|capture| {
+        *capture.borrow_mut() = Some(Vec::new());
+    });
+    let _ = handle(input);
+    RESPONSE_CAPTURE.with(|capture| {
+        capture
+            .borrow_mut()
+            .take()
+            .unwrap_or_default()
+            .join("\n")
+    })
+}
+
+fn handle_with(input: &str, mut respond: impl FnMut(&str)) -> CommandResult {
     let trimmed = input.trim();
     let mut parts = trimmed
         .split_whitespace()
@@ -161,7 +160,7 @@ pub fn handle(input: &str) -> CommandResult {
     let (parsed_parts, exec_ctx) = match parse_execution_context(&parts) {
         Ok(value) => value,
         Err(err) => {
-            print_response(&err);
+            respond(&err);
             return CommandResult::Continue;
         }
     };
@@ -187,12 +186,12 @@ pub fn handle(input: &str) -> CommandResult {
             let args = parts.iter().skip(1).map(String::as_str).collect::<Vec<_>>();
             match modules::execute_command(first, &args, &exec_ctx) {
                 Ok(Some(message)) => {
-                    print_response(&message);
+                    respond(&message);
                     return CommandResult::Continue;
                 }
                 Ok(None) => {}
                 Err(err) => {
-                    print_response(&err);
+                    respond(&err);
                     return CommandResult::Continue;
                 }
             }
@@ -203,12 +202,12 @@ pub fn handle(input: &str) -> CommandResult {
         let args = parts.iter().skip(2).map(String::as_str).collect::<Vec<_>>();
         match modules::execute_command(&composed, &args, &exec_ctx) {
             Ok(Some(message)) => {
-                print_response(&message);
+                respond(&message);
                 return CommandResult::Continue;
             }
             Ok(None) => {}
             Err(err) => {
-                print_response(&err);
+                respond(&err);
                 return CommandResult::Continue;
             }
         }
@@ -216,18 +215,58 @@ pub fn handle(input: &str) -> CommandResult {
 
     match parts.first().map(String::as_str).unwrap_or("") {
         "help" => {
-            print_help();
+            for line in help_lines() {
+                respond(&line);
+            }
             CommandResult::Continue
         }
         "ping" => {
-            print_response("pong");
+            respond("pong");
             CommandResult::Continue
         }
         "quit" => CommandResult::Quit,
         "" => CommandResult::Continue,
         _ => {
-            print_response(&format!("Unknown command: {trimmed}"));
+            respond(&format!("Unknown command: {trimmed}"));
             CommandResult::Continue
         }
     }
+}
+
+fn help_lines() -> Vec<String> {
+    let mut lines = vec!["Available commands:".to_string()];
+    for spec in COMMAND_SPECS {
+        match spec.name {
+            "help" => lines.push("- help: show this help message".to_string()),
+            "ping" => lines.push("- ping: respond with pong".to_string()),
+            "quit" => lines.push("- quit: exit Arcadia".to_string()),
+            "configuration" => {
+                lines.push("- configuration <name>: open config file in default editor".to_string());
+                lines.push(
+                    "- configuration [show|get|set|reset] ...: manage commandline config".to_string(),
+                );
+                if !spec.aliases.is_empty() {
+                    let aliases = spec.aliases.join(" -> ");
+                    lines.push(format!("- aliases: {aliases} -> configuration"));
+                }
+            }
+            "module" => {
+                lines.push("- module <name> enable|disable: toggle a module".to_string());
+                lines.push(
+                    "- module <name> enable -requirements: enable module and required dependencies"
+                        .to_string(),
+                );
+            }
+            _ => {}
+        }
+    }
+    let module_command_lines = modules::enabled_command_help_lines();
+    if !module_command_lines.is_empty() {
+        lines.push("- enabled module commands:".to_string());
+        lines.extend(module_command_lines);
+    }
+    lines.push(
+        "- global flags: --net:as lan:<host/ip/alias> | --net:timeout <milliseconds>".to_string(),
+    );
+    lines
 }

@@ -1,17 +1,49 @@
 use std::time::Duration;
 
 use crate::cli;
-use arcadia_core::config::modules::ModulesConfig;
+use arcadia_core::config::modules::{
+    ModuleManifest, ModulesConfig, NET_MODULE_NAME, REMOTE_SESSION_MODULE_NAME, SHELL_MODULE_NAME,
+};
 use arcadia_core::config::ConfigFile;
 use arcadia_core::modules;
 use arcadia_core::navigation;
 use gpui::{
-    div, rgb, AppContext, Application, Context, FocusHandle, InteractiveElement, IntoElement,
+    div, img, rgb, AppContext, Application, Context, FocusHandle, InteractiveElement, IntoElement,
     KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Timer,
     Window, WindowAppearance, WindowOptions,
 };
 
-use super::theme::render_glyph;
+use super::assets::EmbeddedAssets;
+use super::theme::render_icon;
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum ShellMode {
+    Generic,
+    Internal,
+}
+
+impl ShellMode {
+    fn toggle(self) -> Self {
+        match self {
+            ShellMode::Generic => ShellMode::Internal,
+            ShellMode::Internal => ShellMode::Generic,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        match self {
+            ShellMode::Generic => "shell",
+            ShellMode::Internal => "internal",
+        }
+    }
+
+    fn command_token(self) -> &'static str {
+        match self {
+            ShellMode::Generic => "shell.execute",
+            ShellMode::Internal => "shell.internal",
+        }
+    }
+}
 
 pub struct ArcadiaRoot {
     pub title: SharedString,
@@ -29,6 +61,7 @@ pub struct ArcadiaRoot {
     pub shell_caret_visible: bool,
     pub shell_caret_task_started: bool,
     pub shell_stream_nonce: u64,
+    pub shell_mode: ShellMode,
 }
 
 impl Render for ArcadiaRoot {
@@ -66,10 +99,37 @@ impl Render for ArcadiaRoot {
                     .border_color(if is_dark { rgb(0x2a3340) } else { rgb(0xe6e8ef) })
                     .child(
                         div()
-                            .text_lg()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
-                            .child("Arcadia"),
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                img("icons/app-icon.png")
+                                    .size_8()
+                                    .rounded_sm(),
+                            )
+                            .child(
+                                div()
+                                    .text_lg()
+                                    .font_weight(gpui::FontWeight::BOLD)
+                                    .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
+                                    .child("Arcadia"),
+                            )
+                            .child(if self.remote_session_enabled() {
+                                div()
+                                    .ml_2()
+                                    .px_2()
+                                    .py_1()
+                                    .rounded_md()
+                                    .border_1()
+                                    .border_color(if is_dark { rgb(0x374151) } else { rgb(0xd1d5db) })
+                                    .bg(if is_dark { rgb(0x111827) } else { rgb(0xffffff) })
+                                    .text_xs()
+                                    .font_weight(gpui::FontWeight::NORMAL)
+                                    .text_color(if is_dark { rgb(0xd1d5db) } else { rgb(0x374151) })
+                                    .child("local v")
+                            } else {
+                                div()
+                            }),
                     )
                     .child(
                         div()
@@ -137,6 +197,12 @@ impl Render for ArcadiaRoot {
                     .h_full()
                     .p_2()
                     .child(self.shell_panel(window, cx))
+            } else if self.active_page_id == "global.modules" {
+                div()
+                    .flex_1()
+                    .h_full()
+                    .p_6()
+                    .child(self.modules_panel(cx, is_dark))
             } else {
                 div()
                     .flex_1()
@@ -168,7 +234,6 @@ impl Render for ArcadiaRoot {
                                     .map_or("Page definition not found.", |page| page.description),
                             ),
                     )
-                    .child(self.modules_panel(cx, is_dark))
             })
             .child(self.requirements_modal(cx, is_dark))
     }
@@ -182,7 +247,7 @@ impl ArcadiaRoot {
             .unwrap_or_default();
         let shell_enabled = module_rows
             .iter()
-            .find(|(name, _)| name == "shell")
+            .find(|(name, _)| name == SHELL_MODULE_NAME)
             .map(|(_, enabled)| *enabled)
             .unwrap_or(false);
         ArcadiaRoot {
@@ -201,6 +266,7 @@ impl ArcadiaRoot {
             shell_caret_visible: true,
             shell_caret_task_started: false,
             shell_stream_nonce: 0,
+            shell_mode: ShellMode::Generic,
         }
     }
 
@@ -211,15 +277,32 @@ impl ArcadiaRoot {
         self.shell_enabled = self
             .module_rows
             .iter()
-            .find(|(name, _)| name == "shell")
+            .find(|(name, _)| name == SHELL_MODULE_NAME)
             .map(|(_, enabled)| *enabled)
             .unwrap_or(false);
         self.ensure_valid_navigation_selection();
+    }
+    fn net_enabled(&self) -> bool {
+        self.module_rows
+            .iter()
+            .find(|(name, _)| name == NET_MODULE_NAME)
+            .map(|(_, enabled)| *enabled)
+            .unwrap_or(false)
+    }
+
+
+    fn remote_session_enabled(&self) -> bool {
+        self.module_rows
+            .iter()
+            .find(|(name, _)| name == REMOTE_SESSION_MODULE_NAME)
+            .map(|(_, enabled)| *enabled)
+            .unwrap_or(false)
     }
 
     pub fn is_page_visible(&self, page_id: &str) -> bool {
         match page_id {
             "utility.shell" => self.shell_enabled,
+            "network.overview" => self.net_enabled(),
             _ => true,
         }
     }
@@ -288,7 +371,6 @@ impl ArcadiaRoot {
             return div();
         }
         div()
-            .mt_4()
             .w_full()
             .p_4()
             .rounded_lg()
@@ -299,7 +381,13 @@ impl ArcadiaRoot {
             .flex_col()
             .gap_3()
             .children(self.module_rows.iter().map(|(module_name, enabled)| {
-                Self::module_row_item(cx, module_name.clone(), *enabled, is_dark)
+                Self::module_row_item(
+                    cx,
+                    module_name.clone(),
+                    *enabled,
+                    ModulesConfig::manifest_for(module_name),
+                    is_dark,
+                )
             }))
     }
 
@@ -341,9 +429,37 @@ impl ArcadiaRoot {
                     .border_color(if is_dark { rgb(0x2f3948) } else { rgb(0xe2e8f0) })
                     .child(
                         div()
-                            .text_sm()
-                            .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
-                            .child("Terminal"),
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_sm()
+                                    .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
+                                    .child("Terminal"),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_0p5()
+                                    .rounded_md()
+                                    .text_xs()
+                                    .bg(if self.shell_mode == ShellMode::Internal {
+                                        if is_dark { rgb(0x1e3a5f) } else { rgb(0xdbeafe) }
+                                    } else if is_dark {
+                                        rgb(0x1f2937)
+                                    } else {
+                                        rgb(0xf3f4f6)
+                                    })
+                                    .text_color(if self.shell_mode == ShellMode::Internal {
+                                        if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+                                    } else if is_dark {
+                                        rgb(0x9ca3af)
+                                    } else {
+                                        rgb(0x6b7280)
+                                    })
+                                    .child(self.shell_mode.label()),
+                            ),
                     )
                     .child(
                         div()
@@ -481,6 +597,12 @@ impl ArcadiaRoot {
             return;
         }
         let key = event.keystroke.key.as_str();
+        let mods = event.keystroke.modifiers;
+        if key == "tab" && mods.shift {
+            self.shell_mode = self.shell_mode.toggle();
+            cx.notify();
+            return;
+        }
         match key {
             "enter" => {
                 let command = self.shell_input.trim().to_string();
@@ -541,7 +663,6 @@ impl ArcadiaRoot {
                 self.shell_cursor += 1;
             }
             _ => {
-                let mods = event.keystroke.modifiers;
                 if !mods.control && !mods.alt && !mods.platform && !mods.function {
                     if let Some(key_char) = &event.keystroke.key_char {
                         let mut chars = self.shell_input.chars().collect::<Vec<_>>();
@@ -572,7 +693,7 @@ impl ArcadiaRoot {
         }
         let args = vec![command];
         let result = modules::execute_command(
-            "shell.execute",
+            self.shell_mode.command_token(),
             &args,
             &modules::ExecutionContext::default(),
         );
@@ -740,9 +861,15 @@ impl ArcadiaRoot {
         cx: &mut Context<Self>,
         module_name: String,
         enabled: bool,
+        manifest: Option<&'static ModuleManifest>,
         is_dark: bool,
     ) -> impl IntoElement {
         let label = if enabled { "Disable" } else { "Enable" };
+        let version = manifest.map(|m| m.version).unwrap_or("unknown");
+        let description = manifest
+            .map(|m| m.description)
+            .unwrap_or("No manifest description.");
+        let state = if enabled { "Enabled" } else { "Disabled" };
         div()
             .w_full()
             .px_3()
@@ -753,12 +880,31 @@ impl ArcadiaRoot {
             .border_color(if is_dark { rgb(0x374151) } else { rgb(0xe2e8f0) })
             .flex()
             .justify_between()
-            .items_center()
+            .items_start()
             .child(
                 div()
-                    .text_sm()
-                    .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
-                    .child(module_name.clone()),
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .child(
+                        div()
+                            .text_sm()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
+                            .child(module_name.clone()),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) })
+                            .child(format!("v{version} - {state}")),
+                    )
+                    .child(
+                        div()
+                            .text_xs()
+                            .text_color(if is_dark { rgb(0x9ca3af) } else { rgb(0x6b7280) })
+                            .child(description),
+                    ),
             )
             .child(
                 div()
@@ -810,6 +956,13 @@ impl ArcadiaRoot {
         is_active: bool,
         is_dark: bool,
     ) -> impl IntoElement {
+        let icon_color = if is_active {
+            if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+        } else if is_dark {
+            rgb(0xd1d5db)
+        } else {
+            rgb(0x374151)
+        };
         div()
             .w_16()
             .h_16()
@@ -831,13 +984,7 @@ impl ArcadiaRoot {
             } else {
                 rgb(0xf6f7fb)
             })
-            .text_color(if is_active {
-                if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
-            } else if is_dark {
-                rgb(0xd1d5db)
-            } else {
-                rgb(0x374151)
-            })
+            .text_color(icon_color)
             .hover(move |style| {
                 style.bg(if is_dark { rgb(0x243246) } else { rgb(0xeef2ff) })
             })
@@ -849,7 +996,7 @@ impl ArcadiaRoot {
                     .justify_center()
                     .gap_1()
                     .text_center()
-                    .child(div().child(render_glyph(system_image)))
+                    .child(render_icon(system_image).size_5().text_color(icon_color))
                     .child(div().child(label)),
             )
             .on_mouse_down(
@@ -877,6 +1024,13 @@ impl ArcadiaRoot {
         is_active: bool,
         is_dark: bool,
     ) -> impl IntoElement {
+        let icon_color = if is_active {
+            if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+        } else if is_dark {
+            rgb(0xd1d5db)
+        } else {
+            rgb(0x374151)
+        };
         div()
             .px_3()
             .py_2()
@@ -895,13 +1049,7 @@ impl ArcadiaRoot {
             } else {
                 rgb(0xf6f7fb)
             })
-            .text_color(if is_active {
-                if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
-            } else if is_dark {
-                rgb(0xd1d5db)
-            } else {
-                rgb(0x374151)
-            })
+            .text_color(icon_color)
             .hover(move |style| {
                 style.bg(if is_dark { rgb(0x243246) } else { rgb(0xeef2ff) })
             })
@@ -910,7 +1058,7 @@ impl ArcadiaRoot {
                     .flex()
                     .gap_2()
                     .items_center()
-                    .child(div().child(render_glyph(system_image)))
+                    .child(render_icon(system_image).size_4().text_color(icon_color))
                     .child(div().child(label)),
             )
             .on_mouse_down(
@@ -933,6 +1081,13 @@ impl ArcadiaRoot {
         is_active: bool,
         is_dark: bool,
     ) -> impl IntoElement {
+        let icon_color = if is_active {
+            if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+        } else if is_dark {
+            rgb(0xd1d5db)
+        } else {
+            rgb(0x374151)
+        };
         div()
             .px_3()
             .py_2()
@@ -951,13 +1106,7 @@ impl ArcadiaRoot {
             } else {
                 rgb(0xf6f7fb)
             })
-            .text_color(if is_active {
-                if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
-            } else if is_dark {
-                rgb(0xd1d5db)
-            } else {
-                rgb(0x374151)
-            })
+            .text_color(icon_color)
             .hover(move |style| {
                 style.bg(if is_dark { rgb(0x243246) } else { rgb(0xeef2ff) })
             })
@@ -966,7 +1115,7 @@ impl ArcadiaRoot {
                     .flex()
                     .gap_2()
                     .items_center()
-                    .child(div().child(render_glyph(system_image)))
+                    .child(render_icon(system_image).size_4().text_color(icon_color))
                     .child(div().child(label)),
             )
             .on_mouse_down(
@@ -989,7 +1138,7 @@ pub fn run() {
         cli::start_loop(|| process::exit(0));
     });
 
-    Application::new().run(|app| {
+    Application::new().with_assets(EmbeddedAssets).run(|app| {
         app.open_window(WindowOptions::default(), |_window, app| {
             app.new(|cx| ArcadiaRoot::new(cx))
         })

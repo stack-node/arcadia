@@ -4,6 +4,7 @@ use arcadia_core::modules;
 
 fn main() {
     modules::load_all();
+    arcadia_core::modules::shell::set_internal_executor(cli::handle_internal);
 
     #[cfg(feature = "gui")]
     {
