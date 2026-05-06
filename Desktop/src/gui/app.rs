@@ -8,13 +8,14 @@ use arcadia_core::config::ConfigFile;
 use arcadia_core::modules;
 use arcadia_core::navigation;
 use gpui::{
-    div, img, rgb, AppContext, Application, Context, FocusHandle, InteractiveElement, IntoElement,
-    KeyDownEvent, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Timer,
-    Window, WindowAppearance, WindowOptions,
+    canvas, div, fill, img, point, px, rgb, size, AppContext, Application, Bounds, Context, Div,
+    FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, PathBuilder, Render,
+    Rgba, SharedString, StatefulInteractiveElement, Styled, Timer, Window, WindowAppearance,
+    WindowOptions,
 };
 
 use super::assets::EmbeddedAssets;
-use super::theme::render_icon;
+use super::theme::{self, render_icon};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum ShellMode {
@@ -62,10 +63,17 @@ pub struct ArcadiaRoot {
     pub shell_caret_task_started: bool,
     pub shell_stream_nonce: u64,
     pub shell_mode: ShellMode,
+    pub splash_elapsed_ms: f32,
+    pub splash_tick_started: bool,
+    pub sidebar_visible: bool,
 }
 
 impl Render for ArcadiaRoot {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.splash_elapsed_ms < SPLASH_TOTAL_MS {
+            self.ensure_splash_tick(window, cx);
+            return self.render_splash();
+        }
         self.ensure_shell_caret_task(window, cx);
         let is_dark = matches!(
             window.appearance(),
@@ -84,157 +92,53 @@ impl Render for ArcadiaRoot {
 
         div()
             .size_full()
-            .bg(if is_dark { rgb(0x0f1115) } else { rgb(0xffffff) })
+            .bg(if is_dark {
+                rgb(0x0f1115)
+            } else {
+                rgb(0xffffff)
+            })
             .flex()
-            .child(
-                div()
-                    .h_full()
-                    .w_64()
-                    .flex()
-                    .flex_col()
-                    .p_4()
-                    .gap_2()
-                    .bg(if is_dark { rgb(0x171b22) } else { rgb(0xf6f7fb) })
-                    .border_r_1()
-                    .border_color(if is_dark { rgb(0x2a3340) } else { rgb(0xe6e8ef) })
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                img("icons/app-icon.png")
-                                    .size_8()
-                                    .rounded_sm(),
-                            )
-                            .child(
-                                div()
-                                    .text_lg()
-                                    .font_weight(gpui::FontWeight::BOLD)
-                                    .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
-                                    .child("Arcadia"),
-                            )
-                            .child(if self.remote_session_enabled() {
-                                div()
-                                    .ml_2()
-                                    .px_2()
-                                    .py_1()
-                                    .rounded_md()
-                                    .border_1()
-                                    .border_color(if is_dark { rgb(0x374151) } else { rgb(0xd1d5db) })
-                                    .bg(if is_dark { rgb(0x111827) } else { rgb(0xffffff) })
-                                    .text_xs()
-                                    .font_weight(gpui::FontWeight::NORMAL)
-                                    .text_color(if is_dark { rgb(0xd1d5db) } else { rgb(0x374151) })
-                                    .child("local v")
-                            } else {
-                                div()
-                            }),
-                    )
-                    .child(
-                        div()
-                            .id("sidebar-group-tabs")
-                            .w_full()
-                            .overflow_x_scroll()
-                            .child(
-                                div()
-                                    .flex()
-                                    .gap_2()
-                                    .w_full()
-                                    .justify_center()
-                                    .items_start()
-                                    .children(visible_groups.iter().map(|group| {
-                                        Self::sidebar_group_item(
-                                            cx,
-                                            group.label,
-                                            group.glyph,
-                                            group.id,
-                                            self.active_group_id == group.id,
-                                            is_dark,
-                                        )
-                                    })),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .id("sidebar-subtabs")
-                            .flex_1()
-                            .overflow_y_scroll()
-                            .child(div().flex().flex_col().gap_1().children(
-                                active_group.pages.iter().filter_map(|page_id| {
-                                    if !self.is_page_visible(page_id) {
-                                        return None;
-                                    }
-                                    Self::page_by_id(*page_id).map(|page| {
-                                        Self::sidebar_item(
-                                            cx,
-                                            page.title,
-                                            page.glyph,
-                                            page.id,
-                                            self.active_page_id == page.id,
-                                            is_dark,
-                                        )
-                                    })
-                                }),
-                            )),
-                    )
-                    .children(navigation::GLOBAL_PAGE_IDS.iter().filter_map(|page_id| {
-                        Self::page_by_id(*page_id).map(|page| {
-                            Self::sidebar_global_item(
-                                cx,
-                                page.title,
-                                page.glyph,
-                                page.id,
-                                self.active_page_id == page.id,
-                                is_dark,
-                            )
-                        })
-                    })),
-            )
-            .child(if self.active_page_id == "utility.shell" {
-                div()
-                    .flex_1()
-                    .h_full()
-                    .p_2()
-                    .child(self.shell_panel(window, cx))
-            } else if self.active_page_id == "global.modules" {
-                div()
-                    .flex_1()
-                    .h_full()
-                    .p_6()
-                    .child(self.modules_panel(cx, is_dark))
+            .child(if self.sidebar_visible {
+                self.render_sidebar(cx, &visible_groups, active_group, is_dark)
             } else {
                 div()
+            })
+            .child(
+                div()
                     .flex_1()
                     .h_full()
-                    .p_6()
                     .flex()
                     .flex_col()
-                    .justify_center()
-                    .items_center()
-                    .gap_3()
                     .child(
                         div()
-                            .text_3xl()
-                            .font_weight(gpui::FontWeight::BOLD)
-                            .child(self.title.clone()),
-                    )
-                    .child(
-                        div()
-                            .text_2xl()
-                            .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x1f2937) })
-                            .child(active_page.map_or("Page", |page| page.title)),
-                    )
-                    .child(
-                        div()
-                            .text_base()
-                            .text_color(if is_dark { rgb(0x9ca3af) } else { rgb(0x6b7280) })
+                            .w_full()
+                            .px_3()
+                            .py_2()
+                            .border_b_1()
+                            .border_color(if is_dark {
+                                rgb(0x2a3340)
+                            } else {
+                                rgb(0xe6e8ef)
+                            })
                             .child(
-                                active_page
-                                    .map_or("Page definition not found.", |page| page.description),
+                                div()
+                                    .w_full()
+                                    .flex()
+                                    .items_center()
+                                    .justify_between()
+                                    .child(Self::sidebar_toggle_button(cx, is_dark))
+                                    .child(Self::sidebar_global_item(
+                                        cx,
+                                        "Logs",
+                                        "logs",
+                                        "global.logs",
+                                        self.active_page_id == "global.logs",
+                                        is_dark,
+                                    )),
                             ),
                     )
-            })
+                    .child(self.render_active_content(window, cx, active_page, is_dark)),
+            )
             .child(self.requirements_modal(cx, is_dark))
     }
 }
@@ -267,6 +171,9 @@ impl ArcadiaRoot {
             shell_caret_task_started: false,
             shell_stream_nonce: 0,
             shell_mode: ShellMode::Generic,
+            splash_elapsed_ms: 0.0,
+            splash_tick_started: false,
+            sidebar_visible: true,
         }
     }
 
@@ -282,6 +189,198 @@ impl ArcadiaRoot {
             .unwrap_or(false);
         self.ensure_valid_navigation_selection();
     }
+
+    fn render_sidebar(
+        &self,
+        cx: &mut Context<Self>,
+        visible_groups: &[&'static navigation::NavigationGroupDefinition],
+        active_group: &'static navigation::NavigationGroupDefinition,
+        is_dark: bool,
+    ) -> Div {
+        div()
+            .h_full()
+            .w_64()
+            .flex()
+            .flex_col()
+            .p_4()
+            .gap_2()
+            .bg(if is_dark {
+                rgb(0x171b22)
+            } else {
+                rgb(0xf6f7fb)
+            })
+            .border_r_1()
+            .border_color(if is_dark {
+                rgb(0x2a3340)
+            } else {
+                rgb(0xe6e8ef)
+            })
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(img("icons/app-icon.png").size_8().rounded_sm())
+                    .child(
+                        div()
+                            .text_lg()
+                            .font_weight(gpui::FontWeight::BOLD)
+                            .text_color(if is_dark {
+                                rgb(0xe5e7eb)
+                            } else {
+                                rgb(0x111827)
+                            })
+                            .child("Arcadia"),
+                    )
+                    .child(if self.remote_session_enabled() {
+                        div()
+                            .ml_2()
+                            .px_2()
+                            .py_1()
+                            .rounded_md()
+                            .border_1()
+                            .border_color(if is_dark {
+                                rgb(0x374151)
+                            } else {
+                                rgb(0xd1d5db)
+                            })
+                            .bg(if is_dark {
+                                rgb(0x111827)
+                            } else {
+                                rgb(0xffffff)
+                            })
+                            .text_xs()
+                            .font_weight(gpui::FontWeight::NORMAL)
+                            .text_color(if is_dark {
+                                rgb(0xd1d5db)
+                            } else {
+                                rgb(0x374151)
+                            })
+                            .child("local v")
+                    } else {
+                        div()
+                    }),
+            )
+            .child(
+                div()
+                    .id("sidebar-group-tabs")
+                    .w_full()
+                    .overflow_x_scroll()
+                    .child(
+                        div()
+                            .flex()
+                            .gap_2()
+                            .w_full()
+                            .justify_center()
+                            .items_start()
+                            .children(visible_groups.iter().map(|group| {
+                                Self::sidebar_group_item(
+                                    cx,
+                                    group.label,
+                                    group.glyph,
+                                    group.id,
+                                    self.active_group_id == group.id,
+                                    is_dark,
+                                )
+                            })),
+                    ),
+            )
+            .child(
+                div()
+                    .id("sidebar-subtabs")
+                    .flex_1()
+                    .overflow_y_scroll()
+                    .child(div().flex().flex_col().gap_1().children(
+                        active_group.pages.iter().filter_map(|page_id| {
+                            if !self.is_page_visible(page_id) {
+                                return None;
+                            }
+                            Self::page_by_id(*page_id).map(|page| {
+                                Self::sidebar_item(
+                                    cx,
+                                    page.title,
+                                    page.glyph,
+                                    page.id,
+                                    self.active_page_id == page.id,
+                                    is_dark,
+                                )
+                            })
+                        }),
+                    )),
+            )
+            .children(navigation::GLOBAL_PAGE_IDS.iter().filter_map(|page_id| {
+                Self::page_by_id(*page_id).map(|page| {
+                    Self::sidebar_global_item(
+                        cx,
+                        page.title,
+                        page.glyph,
+                        page.id,
+                        self.active_page_id == page.id,
+                        is_dark,
+                    )
+                })
+            }))
+    }
+
+    fn render_active_content(
+        &self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+        active_page: Option<&'static navigation::NavigationPageDefinition>,
+        is_dark: bool,
+    ) -> Div {
+        if self.active_page_id == "utility.shell" {
+            return div()
+                .flex_1()
+                .h_full()
+                .p_2()
+                .child(self.shell_panel(window, cx));
+        }
+        if self.active_page_id == "global.modules" {
+            return div()
+                .flex_1()
+                .h_full()
+                .p_6()
+                .child(self.modules_panel(cx, is_dark));
+        }
+        div()
+            .flex_1()
+            .h_full()
+            .p_6()
+            .flex()
+            .flex_col()
+            .justify_center()
+            .items_center()
+            .gap_3()
+            .child(
+                div()
+                    .text_3xl()
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .child(self.title.clone()),
+            )
+            .child(
+                div()
+                    .text_2xl()
+                    .text_color(if is_dark {
+                        rgb(0xe5e7eb)
+                    } else {
+                        rgb(0x1f2937)
+                    })
+                    .child(active_page.map_or("Page", |page| page.title)),
+            )
+            .child(
+                div()
+                    .text_base()
+                    .text_color(if is_dark {
+                        rgb(0x9ca3af)
+                    } else {
+                        rgb(0x6b7280)
+                    })
+                    .child(
+                        active_page.map_or("Page definition not found.", |page| page.description),
+                    ),
+            )
+    }
     fn net_enabled(&self) -> bool {
         self.module_rows
             .iter()
@@ -289,7 +388,6 @@ impl ArcadiaRoot {
             .map(|(_, enabled)| *enabled)
             .unwrap_or(false)
     }
-
 
     fn remote_session_enabled(&self) -> bool {
         self.module_rows
@@ -307,9 +405,7 @@ impl ArcadiaRoot {
         }
     }
 
-    pub fn active_page_if_visible(
-        &self,
-    ) -> Option<&'static navigation::NavigationPageDefinition> {
+    pub fn active_page_if_visible(&self) -> Option<&'static navigation::NavigationPageDefinition> {
         if self.is_page_visible(self.active_page_id) {
             Self::page_by_id(self.active_page_id)
         } else {
@@ -320,7 +416,12 @@ impl ArcadiaRoot {
     pub fn visible_groups(&self) -> Vec<&'static navigation::NavigationGroupDefinition> {
         navigation::GROUP_DEFINITIONS
             .iter()
-            .filter(|group| group.pages.iter().any(|page_id| self.is_page_visible(page_id)))
+            .filter(|group| {
+                group
+                    .pages
+                    .iter()
+                    .any(|page_id| self.is_page_visible(page_id))
+            })
             .collect()
     }
 
@@ -345,8 +446,10 @@ impl ArcadiaRoot {
         let page_is_visible = self.is_page_visible(self.active_page_id);
         if !page_is_visible {
             if let Some(group) = active_group {
-                if let Some(first_visible_page) =
-                    group.pages.iter().find(|page_id| self.is_page_visible(page_id))
+                if let Some(first_visible_page) = group
+                    .pages
+                    .iter()
+                    .find(|page_id| self.is_page_visible(page_id))
                 {
                     self.active_page_id = first_visible_page;
                 }
@@ -360,9 +463,7 @@ impl ArcadiaRoot {
         navigation::page_by_id(page_id)
     }
 
-    pub fn group_by_id(
-        group_id: &'static str,
-    ) -> &'static navigation::NavigationGroupDefinition {
+    pub fn group_by_id(group_id: &'static str) -> &'static navigation::NavigationGroupDefinition {
         navigation::group_by_id(group_id).unwrap_or(&navigation::GROUP_DEFINITIONS[0])
     }
 
@@ -374,9 +475,9 @@ impl ArcadiaRoot {
             .w_full()
             .p_4()
             .rounded_lg()
-            .bg(if is_dark { rgb(0x151a22) } else { rgb(0xf8fafc) })
+            .bg(theme::module_panel_bg(is_dark))
             .border_1()
-            .border_color(if is_dark { rgb(0x2f3948) } else { rgb(0xe2e8f0) })
+            .border_color(theme::module_panel_stroke(is_dark))
             .flex()
             .flex_col()
             .gap_3()
@@ -391,11 +492,7 @@ impl ArcadiaRoot {
             }))
     }
 
-    pub fn shell_panel(
-        &self,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> impl IntoElement {
+    pub fn shell_panel(&self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if self.active_page_id != "utility.shell" {
             return div();
         }
@@ -410,9 +507,17 @@ impl ArcadiaRoot {
             .h_full()
             .p_1()
             .rounded_lg()
-            .bg(if is_dark { rgb(0x151a22) } else { rgb(0xf8fafc) })
+            .bg(if is_dark {
+                rgb(0x151a22)
+            } else {
+                rgb(0xf8fafc)
+            })
             .border_1()
-            .border_color(if is_dark { rgb(0x2f3948) } else { rgb(0xe2e8f0) })
+            .border_color(if is_dark {
+                rgb(0x2f3948)
+            } else {
+                rgb(0xe2e8f0)
+            })
             .flex()
             .flex_col()
             .gap_0()
@@ -424,9 +529,17 @@ impl ArcadiaRoot {
                     .flex()
                     .justify_between()
                     .items_center()
-                    .bg(if is_dark { rgb(0x0f141b) } else { rgb(0xffffff) })
+                    .bg(if is_dark {
+                        rgb(0x0f141b)
+                    } else {
+                        rgb(0xffffff)
+                    })
                     .border_b_1()
-                    .border_color(if is_dark { rgb(0x2f3948) } else { rgb(0xe2e8f0) })
+                    .border_color(if is_dark {
+                        rgb(0x2f3948)
+                    } else {
+                        rgb(0xe2e8f0)
+                    })
                     .child(
                         div()
                             .flex()
@@ -435,7 +548,11 @@ impl ArcadiaRoot {
                             .child(
                                 div()
                                     .text_sm()
-                                    .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
+                                    .text_color(if is_dark {
+                                        rgb(0xe5e7eb)
+                                    } else {
+                                        rgb(0x111827)
+                                    })
                                     .child("Terminal"),
                             )
                             .child(
@@ -445,14 +562,22 @@ impl ArcadiaRoot {
                                     .rounded_md()
                                     .text_xs()
                                     .bg(if self.shell_mode == ShellMode::Internal {
-                                        if is_dark { rgb(0x1e3a5f) } else { rgb(0xdbeafe) }
+                                        if is_dark {
+                                            rgb(0x1e3a5f)
+                                        } else {
+                                            rgb(0xdbeafe)
+                                        }
                                     } else if is_dark {
                                         rgb(0x1f2937)
                                     } else {
                                         rgb(0xf3f4f6)
                                     })
                                     .text_color(if self.shell_mode == ShellMode::Internal {
-                                        if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+                                        if is_dark {
+                                            rgb(0x93c5fd)
+                                        } else {
+                                            rgb(0x1d4ed8)
+                                        }
                                     } else if is_dark {
                                         rgb(0x9ca3af)
                                     } else {
@@ -467,8 +592,16 @@ impl ArcadiaRoot {
                             .py_1()
                             .rounded_md()
                             .cursor_pointer()
-                            .bg(if is_dark { rgb(0x1f2937) } else { rgb(0xf3f4f6) })
-                            .text_color(if is_dark { rgb(0xd1d5db) } else { rgb(0x374151) })
+                            .bg(if is_dark {
+                                rgb(0x1f2937)
+                            } else {
+                                rgb(0xf3f4f6)
+                            })
+                            .text_color(if is_dark {
+                                rgb(0xd1d5db)
+                            } else {
+                                rgb(0x374151)
+                            })
                             .child("Clear")
                             .on_mouse_down(
                                 gpui::MouseButton::Left,
@@ -490,7 +623,11 @@ impl ArcadiaRoot {
                     .children(self.shell_history.iter().map(|line| {
                         div()
                             .text_sm()
-                            .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x1f2937) })
+                            .text_color(if is_dark {
+                                rgb(0xe5e7eb)
+                            } else {
+                                rgb(0x1f2937)
+                            })
                             .child(line.clone())
                     })),
             )
@@ -510,7 +647,11 @@ impl ArcadiaRoot {
                     } else {
                         rgb(0xe2e8f0)
                     })
-                    .bg(if is_dark { rgb(0x0f141b) } else { rgb(0xffffff) })
+                    .bg(if is_dark {
+                        rgb(0x0f141b)
+                    } else {
+                        rgb(0xffffff)
+                    })
                     .track_focus(&self.shell_focus)
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -522,13 +663,21 @@ impl ArcadiaRoot {
                     .child(
                         div()
                             .text_sm()
-                            .text_color(if is_dark { rgb(0x60a5fa) } else { rgb(0x1d4ed8) })
+                            .text_color(if is_dark {
+                                rgb(0x60a5fa)
+                            } else {
+                                rgb(0x1d4ed8)
+                            })
                             .child("$"),
                     )
                     .child(
                         div()
                             .text_sm()
-                            .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
+                            .text_color(if is_dark {
+                                rgb(0xe5e7eb)
+                            } else {
+                                rgb(0x111827)
+                            })
                             .child(self.shell_input_with_cursor(is_focused)),
                     ),
             )
@@ -557,8 +706,7 @@ impl ArcadiaRoot {
         self.shell_caret_task_started = true;
         cx.spawn_in(
             window,
-            move |view: gpui::WeakEntity<ArcadiaRoot>,
-                  cx: &mut gpui::AsyncWindowContext| {
+            move |view: gpui::WeakEntity<ArcadiaRoot>, cx: &mut gpui::AsyncWindowContext| {
                 let mut cx = cx.clone();
                 async move {
                     loop {
@@ -585,6 +733,67 @@ impl ArcadiaRoot {
             },
         )
         .detach();
+    }
+
+    fn ensure_splash_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.splash_tick_started {
+            return;
+        }
+        self.splash_tick_started = true;
+        cx.spawn_in(
+            window,
+            move |view: gpui::WeakEntity<ArcadiaRoot>, cx: &mut gpui::AsyncWindowContext| {
+                let mut cx = cx.clone();
+                async move {
+                    loop {
+                        Timer::after(Duration::from_millis(16)).await;
+                        let done = cx
+                            .update(|_, app| {
+                                view.update(app, |this, cx| {
+                                    this.splash_elapsed_ms += 16.0;
+                                    cx.notify();
+                                    this.splash_elapsed_ms >= SPLASH_TOTAL_MS
+                                })
+                                .unwrap_or(true)
+                            })
+                            .unwrap_or(true);
+                        if done {
+                            break;
+                        }
+                    }
+                }
+            },
+        )
+        .detach();
+    }
+
+    fn render_splash(&self) -> Div {
+        let t = self.splash_elapsed_ms;
+
+        let hills_t = ease_out_cubic(splash_phase(t, 200.0, 900.0));
+        let sun_t = ease_out_cubic(splash_phase(t, 700.0, 1100.0));
+        let arch_t = ease_out_cubic(splash_phase(t, 1300.0, 1200.0));
+        let stars_t = splash_phase(t, 2000.0, 800.0);
+        let master_alpha = if t < 3600.0 {
+            splash_phase(t, 0.0, 400.0)
+        } else {
+            1.0 - splash_phase(t, 3600.0, 700.0)
+        };
+
+        div().size_full().opacity(master_alpha).child(
+            canvas(
+                |_bounds, _window, _cx| {},
+                move |bounds, _, window, _cx| {
+                    splash_draw_bg(bounds, window);
+                    splash_draw_horizon_glow(bounds, sun_t, window);
+                    splash_draw_arch(bounds, arch_t, window);
+                    splash_draw_stars(bounds, stars_t, window);
+                    splash_draw_sun(bounds, sun_t, window);
+                    splash_draw_hills(bounds, hills_t, window);
+                },
+            )
+            .size_full(),
+        )
     }
 
     fn handle_shell_key_down(
@@ -710,8 +919,7 @@ impl ArcadiaRoot {
         let lines: Vec<String> = output.lines().map(str::to_string).collect();
         cx.spawn_in(
             window,
-            move |view: gpui::WeakEntity<ArcadiaRoot>,
-                  cx: &mut gpui::AsyncWindowContext| {
+            move |view: gpui::WeakEntity<ArcadiaRoot>, cx: &mut gpui::AsyncWindowContext| {
                 let mut cx = cx.clone();
                 async move {
                     for line in lines {
@@ -740,11 +948,7 @@ impl ArcadiaRoot {
         .detach();
     }
 
-    pub fn requirements_modal(
-        &self,
-        cx: &mut Context<Self>,
-        is_dark: bool,
-    ) -> impl IntoElement {
+    pub fn requirements_modal(&self, cx: &mut Context<Self>, is_dark: bool) -> impl IntoElement {
         let Some((module_name, missing)) = &self.pending_module_enable else {
             return div();
         };
@@ -872,48 +1076,84 @@ impl ArcadiaRoot {
         let state = if enabled { "Enabled" } else { "Disabled" };
         div()
             .w_full()
-            .px_3()
-            .py_2()
-            .rounded_md()
-            .bg(if is_dark { rgb(0x111827) } else { rgb(0xffffff) })
+            .px_4()
+            .py_3()
+            .rounded_lg()
+            .bg(theme::module_row_bg(is_dark))
             .border_1()
-            .border_color(if is_dark { rgb(0x374151) } else { rgb(0xe2e8f0) })
+            .border_color(theme::module_row_stroke(is_dark))
             .flex()
             .justify_between()
-            .items_start()
+            .items_center()
+            .gap_4()
             .child(
                 div()
                     .flex()
                     .flex_col()
-                    .gap_1()
+                    .gap_2()
                     .child(
                         div()
-                            .text_sm()
+                            .text_base()
                             .font_weight(gpui::FontWeight::BOLD)
-                            .text_color(if is_dark { rgb(0xe5e7eb) } else { rgb(0x111827) })
+                            .text_color(theme::module_title_text(is_dark))
                             .child(module_name.clone()),
                     )
                     .child(
                         div()
-                            .text_xs()
-                            .text_color(if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) })
-                            .child(format!("v{version} - {state}")),
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div()
+                                    .text_xs()
+                                    .text_color(theme::module_meta_text(is_dark))
+                                    .child(format!("v{version}")),
+                            )
+                            .child(
+                                div()
+                                    .px_2()
+                                    .py_0p5()
+                                    .rounded_full()
+                                    .text_xs()
+                                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                                    .bg(if enabled {
+                                        theme::module_state_enabled_bg(is_dark)
+                                    } else {
+                                        theme::module_state_disabled_bg(is_dark)
+                                    })
+                                    .text_color(if enabled {
+                                        theme::module_state_enabled_text(is_dark)
+                                    } else {
+                                        theme::module_state_disabled_text(is_dark)
+                                    })
+                                    .child(state),
+                            ),
                     )
                     .child(
                         div()
                             .text_xs()
-                            .text_color(if is_dark { rgb(0x9ca3af) } else { rgb(0x6b7280) })
+                            .text_color(theme::module_description_text(is_dark))
                             .child(description),
                     ),
             )
             .child(
                 div()
-                    .px_2()
-                    .py_1()
+                    .px_3()
+                    .py_1p5()
                     .rounded_md()
                     .cursor_pointer()
-                    .bg(if enabled { rgb(0xfee2e2) } else { rgb(0xdcfce7) })
-                    .text_color(if enabled { rgb(0x991b1b) } else { rgb(0x166534) })
+                    .bg(if enabled {
+                        theme::module_button_disable_bg(is_dark)
+                    } else {
+                        theme::module_button_enable_bg(is_dark)
+                    })
+                    .text_color(if enabled {
+                        theme::module_button_disable_text(is_dark)
+                    } else {
+                        theme::module_button_enable_text(is_dark)
+                    })
+                    .text_sm()
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
                     .child(label)
                     .on_mouse_down(
                         gpui::MouseButton::Left,
@@ -932,9 +1172,8 @@ impl ArcadiaRoot {
                                             Some((module_name.clone(), missing));
                                     }
                                     Ok(_) => {
-                                        let _ = cli::handle(&format!(
-                                            "module {module_name} enable"
-                                        ));
+                                        let _ =
+                                            cli::handle(&format!("module {module_name} enable"));
                                         this.pending_module_enable = None;
                                         this.reload_modules();
                                     }
@@ -948,6 +1187,42 @@ impl ArcadiaRoot {
             )
     }
 
+    pub fn sidebar_toggle_button(cx: &mut Context<Self>, is_dark: bool) -> impl IntoElement {
+        div()
+            .w_8()
+            .h_8()
+            .rounded_md()
+            .cursor_pointer()
+            .bg(if is_dark {
+                rgb(0x1f2937)
+            } else {
+                rgb(0xf3f4f6)
+            })
+            .text_color(if is_dark {
+                rgb(0xe5e7eb)
+            } else {
+                rgb(0x1f2937)
+            })
+            .hover(move |style| {
+                style.bg(if is_dark {
+                    rgb(0x243246)
+                } else {
+                    rgb(0xe5e7eb)
+                })
+            })
+            .flex()
+            .items_center()
+            .justify_center()
+            .child(render_icon("tools").size_4())
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    this.sidebar_visible = !this.sidebar_visible;
+                    cx.notify();
+                }),
+            )
+    }
+
     pub fn sidebar_group_item(
         cx: &mut Context<Self>,
         label: &'static str,
@@ -957,7 +1232,11 @@ impl ArcadiaRoot {
         is_dark: bool,
     ) -> impl IntoElement {
         let icon_color = if is_active {
-            if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+            if is_dark {
+                rgb(0x93c5fd)
+            } else {
+                rgb(0x1d4ed8)
+            }
         } else if is_dark {
             rgb(0xd1d5db)
         } else {
@@ -978,7 +1257,11 @@ impl ArcadiaRoot {
                 gpui::FontWeight::NORMAL
             })
             .bg(if is_active {
-                if is_dark { rgb(0x1f2a3e) } else { rgb(0xe1e7ff) }
+                if is_dark {
+                    rgb(0x1f2a3e)
+                } else {
+                    rgb(0xe1e7ff)
+                }
             } else if is_dark {
                 rgb(0x171b22)
             } else {
@@ -986,7 +1269,11 @@ impl ArcadiaRoot {
             })
             .text_color(icon_color)
             .hover(move |style| {
-                style.bg(if is_dark { rgb(0x243246) } else { rgb(0xeef2ff) })
+                style.bg(if is_dark {
+                    rgb(0x243246)
+                } else {
+                    rgb(0xeef2ff)
+                })
             })
             .child(
                 div()
@@ -1025,7 +1312,11 @@ impl ArcadiaRoot {
         is_dark: bool,
     ) -> impl IntoElement {
         let icon_color = if is_active {
-            if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+            if is_dark {
+                rgb(0x93c5fd)
+            } else {
+                rgb(0x1d4ed8)
+            }
         } else if is_dark {
             rgb(0xd1d5db)
         } else {
@@ -1043,7 +1334,11 @@ impl ArcadiaRoot {
                 gpui::FontWeight::NORMAL
             })
             .bg(if is_active {
-                if is_dark { rgb(0x1f2a3e) } else { rgb(0xe1e7ff) }
+                if is_dark {
+                    rgb(0x1f2a3e)
+                } else {
+                    rgb(0xe1e7ff)
+                }
             } else if is_dark {
                 rgb(0x171b22)
             } else {
@@ -1051,7 +1346,11 @@ impl ArcadiaRoot {
             })
             .text_color(icon_color)
             .hover(move |style| {
-                style.bg(if is_dark { rgb(0x243246) } else { rgb(0xeef2ff) })
+                style.bg(if is_dark {
+                    rgb(0x243246)
+                } else {
+                    rgb(0xeef2ff)
+                })
             })
             .child(
                 div()
@@ -1082,7 +1381,11 @@ impl ArcadiaRoot {
         is_dark: bool,
     ) -> impl IntoElement {
         let icon_color = if is_active {
-            if is_dark { rgb(0x93c5fd) } else { rgb(0x1d4ed8) }
+            if is_dark {
+                rgb(0x93c5fd)
+            } else {
+                rgb(0x1d4ed8)
+            }
         } else if is_dark {
             rgb(0xd1d5db)
         } else {
@@ -1100,7 +1403,11 @@ impl ArcadiaRoot {
                 gpui::FontWeight::NORMAL
             })
             .bg(if is_active {
-                if is_dark { rgb(0x1f2a3e) } else { rgb(0xe1e7ff) }
+                if is_dark {
+                    rgb(0x1f2a3e)
+                } else {
+                    rgb(0xe1e7ff)
+                }
             } else if is_dark {
                 rgb(0x171b22)
             } else {
@@ -1108,7 +1415,11 @@ impl ArcadiaRoot {
             })
             .text_color(icon_color)
             .hover(move |style| {
-                style.bg(if is_dark { rgb(0x243246) } else { rgb(0xeef2ff) })
+                style.bg(if is_dark {
+                    rgb(0x243246)
+                } else {
+                    rgb(0xeef2ff)
+                })
             })
             .child(
                 div()
@@ -1126,6 +1437,360 @@ impl ArcadiaRoot {
                 }),
             )
     }
+}
+
+const SPLASH_TOTAL_MS: f32 = 4500.0;
+
+fn splash_phase(elapsed_ms: f32, start_ms: f32, duration_ms: f32) -> f32 {
+    ((elapsed_ms - start_ms) / duration_ms).clamp(0.0, 1.0)
+}
+
+fn ease_out_cubic(t: f32) -> f32 {
+    1.0 - (1.0 - t).powi(3)
+}
+
+fn lerp_f32(a: f32, b: f32, t: f32) -> f32 {
+    a + (b - a) * t
+}
+
+fn lerp_rgba(a: Rgba, b: Rgba, t: f32) -> Rgba {
+    Rgba {
+        r: lerp_f32(a.r, b.r, t),
+        g: lerp_f32(a.g, b.g, t),
+        b: lerp_f32(a.b, b.b, t),
+        a: lerp_f32(a.a, b.a, t),
+    }
+}
+
+fn alpha_rgba(color: Rgba, alpha: f32) -> Rgba {
+    Rgba {
+        a: color.a * alpha,
+        ..color
+    }
+}
+
+fn splash_scene_width(w: f32, h: f32) -> f32 {
+    w.min(h * 1.52)
+}
+
+fn splash_gradient_color(t: f32) -> Rgba {
+    if t < 0.45 {
+        lerp_rgba(theme::SPLASH_BG_TOP, theme::SPLASH_BG_MID, t / 0.45)
+    } else if t < 0.72 {
+        lerp_rgba(
+            theme::SPLASH_BG_MID,
+            theme::SPLASH_BG_HORIZON,
+            (t - 0.45) / 0.27,
+        )
+    } else {
+        lerp_rgba(
+            theme::SPLASH_BG_HORIZON,
+            theme::SPLASH_BG_BOTTOM,
+            (t - 0.72) / 0.28,
+        )
+    }
+}
+
+fn splash_draw_bg(bounds: Bounds<gpui::Pixels>, window: &mut Window) {
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    let ox = f32::from(bounds.origin.x);
+    let oy = f32::from(bounds.origin.y);
+    let strips = 180u32;
+    for i in 0..strips {
+        let t = i as f32 / (strips - 1) as f32;
+        let strip_h = h / strips as f32;
+        let strip_bounds = Bounds {
+            origin: point(px(ox), px(oy + i as f32 * strip_h)),
+            size: size(px(w), px(strip_h + 1.0)),
+        };
+        window.paint_quad(fill(strip_bounds, splash_gradient_color(t)));
+    }
+}
+
+fn splash_draw_horizon_glow(bounds: Bounds<gpui::Pixels>, t: f32, window: &mut Window) {
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    let ox = f32::from(bounds.origin.x);
+    let oy = f32::from(bounds.origin.y);
+    let cx = ox + w * 0.5;
+    let cy = oy + h * 0.665;
+
+    for i in 0..14 {
+        let u = i as f32 / 13.0;
+        let gw = w * lerp_f32(0.18, 0.92, u);
+        let gh = h * lerp_f32(0.08, 0.34, u);
+        let alpha = (1.0 - u).powi(2) * 0.11 * t;
+        let color = if i < 5 {
+            theme::SPLASH_HORIZON_GOLD
+        } else {
+            theme::SPLASH_HORIZON_PINK
+        };
+        let gb = Bounds {
+            origin: point(px(cx - gw * 0.5), px(cy - gh * 0.5)),
+            size: size(px(gw), px(gh)),
+        };
+        window.paint_quad(fill(gb, alpha_rgba(color, alpha)).corner_radii(px(gh * 0.5)));
+    }
+}
+
+fn splash_draw_hills(bounds: Bounds<gpui::Pixels>, t: f32, window: &mut Window) {
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    let ox = f32::from(bounds.origin.x);
+    let oy = f32::from(bounds.origin.y);
+    let offset = (1.0 - t) * h * 0.35;
+    let p = |fx: f32, fy: f32| -> gpui::Point<gpui::Pixels> {
+        point(px(ox + fx * w), px(oy + fy * h + offset))
+    };
+
+    // Back atmospheric ridge
+    {
+        let mut pb = PathBuilder::fill();
+        pb.move_to(p(-0.05, 0.97));
+        pb.cubic_bezier_to(p(0.50, 0.770), p(0.15, 0.920), p(0.34, 0.760));
+        pb.cubic_bezier_to(p(1.05, 0.97), p(0.66, 0.760), p(0.85, 0.920));
+        pb.line_to(p(1.05, 1.10));
+        pb.line_to(p(-0.05, 1.10));
+        pb.close();
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, alpha_rgba(theme::SPLASH_HILL_BACK, 0.72));
+        }
+    }
+
+    // Left lit hill, drawn full-width so there is no center seam.
+    {
+        let mut pb = PathBuilder::fill();
+        pb.move_to(p(-0.06, 0.905));
+        pb.cubic_bezier_to(p(0.28, 0.665), p(0.06, 0.850), p(0.16, 0.690));
+        pb.cubic_bezier_to(p(0.50, 0.710), p(0.38, 0.650), p(0.45, 0.690));
+        pb.cubic_bezier_to(p(1.06, 0.930), p(0.66, 0.760), p(0.86, 0.900));
+        pb.line_to(p(1.06, 1.10));
+        pb.line_to(p(-0.06, 1.10));
+        pb.close();
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, alpha_rgba(theme::SPLASH_HILL_LEFT, 0.82));
+        }
+    }
+
+    // Right lit hill, also full-width to blend cleanly with the left layer.
+    {
+        let mut pb = PathBuilder::fill();
+        pb.move_to(p(1.06, 0.905));
+        pb.cubic_bezier_to(p(0.72, 0.665), p(0.94, 0.850), p(0.84, 0.690));
+        pb.cubic_bezier_to(p(0.50, 0.710), p(0.62, 0.650), p(0.55, 0.690));
+        pb.cubic_bezier_to(p(-0.06, 0.930), p(0.34, 0.760), p(0.14, 0.900));
+        pb.line_to(p(-0.06, 1.10));
+        pb.line_to(p(1.0, 1.10));
+        pb.close();
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, alpha_rgba(theme::SPLASH_HILL_RIGHT, 0.78));
+        }
+    }
+
+    // Front shadow ridge
+    {
+        let mut pb = PathBuilder::fill();
+        pb.move_to(p(-0.05, 1.025));
+        pb.cubic_bezier_to(p(1.05, 1.025), p(0.25, 0.885), p(0.75, 0.885));
+        pb.line_to(p(1.05, 1.10));
+        pb.line_to(p(-0.05, 1.10));
+        pb.close();
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, alpha_rgba(theme::SPLASH_HILL_FRONT, 0.55));
+        }
+    }
+
+    // Deep base, kept very low like the reference image.
+    {
+        let mut pb = PathBuilder::fill();
+        pb.move_to(p(-0.05, 1.085));
+        pb.cubic_bezier_to(p(1.05, 1.085), p(0.28, 0.985), p(0.72, 0.985));
+        pb.line_to(p(1.05, 1.10));
+        pb.line_to(p(-0.05, 1.10));
+        pb.close();
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, alpha_rgba(theme::SPLASH_HILL_FRONT, 0.85));
+        }
+    }
+}
+
+fn splash_draw_sun(bounds: Bounds<gpui::Pixels>, t: f32, window: &mut Window) {
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    let ox = f32::from(bounds.origin.x);
+    let oy = f32::from(bounds.origin.y);
+    let cx = ox + w * 0.5;
+    let base_y = oy + h * 0.652;
+    let cy = lerp_f32(oy + h, base_y, t);
+    let r = (splash_scene_width(w, h) * 0.050).max(34.0);
+    for i in 0..16 {
+        let u = i as f32 / 15.0;
+        let rm = lerp_f32(6.0, 1.35, u);
+        let alpha_mult = (1.0 - u).powf(1.7) * 0.038 + 0.006;
+        let base_color = if i < 9 {
+            theme::SPLASH_HORIZON_PINK
+        } else {
+            theme::SPLASH_HORIZON_GOLD
+        };
+        let gr = r * rm;
+        let gb = Bounds {
+            origin: point(px(cx - gr), px(cy - gr)),
+            size: size(px(gr * 2.0), px(gr * 2.0)),
+        };
+        window.paint_quad(fill(gb, alpha_rgba(base_color, alpha_mult * t)).corner_radii(px(gr)));
+    }
+
+    let soft_edge_layers = [
+        (1.28, 0.22, theme::SPLASH_HORIZON_GOLD),
+        (1.12, 0.34, theme::SPLASH_SUN_LAYERS[3].2),
+    ];
+    for (rm, alpha_mult, base_color) in soft_edge_layers {
+        let gr = r * rm;
+        let gb = Bounds {
+            origin: point(px(cx - gr), px(cy - gr)),
+            size: size(px(gr * 2.0), px(gr * 2.0)),
+        };
+        window.paint_quad(fill(gb, alpha_rgba(base_color, alpha_mult * t)).corner_radii(px(gr)));
+    }
+
+    let core_bounds = Bounds {
+        origin: point(px(cx - r), px(cy - r)),
+        size: size(px(r * 2.0), px(r * 2.0)),
+    };
+    window.paint_quad(fill(core_bounds, alpha_rgba(theme::SPLASH_SUN_LAYERS[4].2, t)).corner_radii(px(r)));
+}
+
+fn splash_draw_arch(bounds: Bounds<gpui::Pixels>, t: f32, window: &mut Window) {
+    if t <= 0.001 {
+        return;
+    }
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    let ox = f32::from(bounds.origin.x);
+    let oy = f32::from(bounds.origin.y);
+    let cx = ox + w * 0.5;
+    let scene_w = splash_scene_width(w, h);
+    let apex_x = cx;
+    let apex_y = oy + h * 0.195;
+    let base_y = oy + h * 0.680;
+    let left_x = cx - scene_w * 0.205;
+    let right_x = cx + scene_w * 0.205;
+
+    // All coordinates unfold from the apex as t grows 0→1
+    let fp = |x: f32, y: f32| -> gpui::Point<gpui::Pixels> {
+        point(px(apex_x + (x - apex_x) * t), px(apex_y + (y - apex_y) * t))
+    };
+
+    let draw_arch = |width: f32, color: Rgba, window: &mut Window| {
+        let mut pb = PathBuilder::stroke(px(width));
+        pb.move_to(fp(left_x, base_y));
+        pb.cubic_bezier_to(
+            fp(apex_x, apex_y),
+            fp(left_x + scene_w * 0.035, oy + h * 0.520),
+            fp(apex_x - scene_w * 0.135, apex_y),
+        );
+        pb.cubic_bezier_to(
+            fp(right_x, base_y),
+            fp(apex_x + scene_w * 0.135, apex_y),
+            fp(right_x - scene_w * 0.035, oy + h * 0.520),
+        );
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, color);
+        }
+    };
+
+    let arch_width = (scene_w * 0.050).clamp(52.0, 88.0);
+    draw_arch(
+        arch_width * 1.85,
+        alpha_rgba(theme::SPLASH_ARCH_GLOW, t * 0.040),
+        window,
+    );
+    draw_arch(
+        arch_width * 1.35,
+        alpha_rgba(theme::SPLASH_ARCH_GLOW, t * 0.105),
+        window,
+    );
+    draw_arch(
+        arch_width,
+        alpha_rgba(theme::SPLASH_ARCH_CORE, t.min(1.0)),
+        window,
+    );
+}
+
+fn splash_draw_stars(bounds: Bounds<gpui::Pixels>, t: f32, window: &mut Window) {
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    let ox = f32::from(bounds.origin.x);
+    let oy = f32::from(bounds.origin.y);
+
+    // (fx, fy, radius, delay_fraction, is_sparkle)
+    let stars: &[(f32, f32, f32, f32, bool)] = &[
+        (0.500, 0.380, 5.0, 0.00, true),
+        (0.460, 0.295, 1.8, 0.15, false),
+        (0.525, 0.275, 1.4, 0.25, false),
+        (0.572, 0.345, 1.4, 0.35, false),
+        (0.442, 0.418, 1.2, 0.10, false),
+        (0.551, 0.448, 1.2, 0.20, false),
+        (0.610, 0.318, 1.5, 0.30, false),
+        (0.398, 0.362, 1.2, 0.40, false),
+    ];
+
+    for &(fx, fy, star_r, delay, is_sparkle) in stars {
+        let local_t = ((t - delay) / (1.0 - delay.min(0.9))).clamp(0.0, 1.0);
+        if local_t <= 0.0 {
+            continue;
+        }
+        let cx = ox + fx * w;
+        let cy = oy + fy * h;
+        let alpha = local_t;
+
+        if is_sparkle {
+            splash_draw_sparkle(cx, cy, star_r, alpha, window);
+        } else {
+            let sb = Bounds {
+                origin: point(px(cx - star_r), px(cy - star_r)),
+                size: size(px(star_r * 2.0), px(star_r * 2.0)),
+            };
+            window.paint_quad(
+                fill(sb, alpha_rgba(theme::SPLASH_STAR, alpha)).corner_radii(px(star_r)),
+            );
+        }
+    }
+}
+
+fn splash_draw_sparkle(cx: f32, cy: f32, r: f32, alpha: f32, window: &mut Window) {
+    // 4-pointed star using two thin diamond paths
+    for angle_offset in [0.0_f32, std::f32::consts::PI / 4.0] {
+        let mut pb = PathBuilder::fill();
+        let inner = r * 0.18;
+        let pts = 4usize;
+        for i in 0..(pts * 2) {
+            let angle = angle_offset + (i as f32 * std::f32::consts::PI) / pts as f32
+                - std::f32::consts::FRAC_PI_2;
+            let rad = if i % 2 == 0 { r } else { inner };
+            let x = cx + angle.cos() * rad;
+            let y = cy + angle.sin() * rad;
+            if i == 0 {
+                pb.move_to(point(px(x), px(y)));
+            } else {
+                pb.line_to(point(px(x), px(y)));
+            }
+        }
+        pb.close();
+        if let Ok(path) = pb.build() {
+            window.paint_path(path, alpha_rgba(theme::SPLASH_STAR, alpha));
+        }
+    }
+    // Small glow circle behind sparkle
+    let glow_r = r * 1.6;
+    let gb = Bounds {
+        origin: point(px(cx - glow_r), px(cy - glow_r)),
+        size: size(px(glow_r * 2.0), px(glow_r * 2.0)),
+    };
+    window.paint_quad(
+        fill(gb, alpha_rgba(theme::SPLASH_STAR, alpha * 0.18)).corner_radii(px(glow_r)),
+    );
 }
 
 pub fn run() {

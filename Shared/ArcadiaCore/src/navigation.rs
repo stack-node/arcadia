@@ -91,7 +91,6 @@ pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
 
 pub const GLOBAL_PAGE_IDS: &[&str] = &[
     "global.dashboard",
-    "global.logs",
     "global.settings",
     "global.modules",
 ];

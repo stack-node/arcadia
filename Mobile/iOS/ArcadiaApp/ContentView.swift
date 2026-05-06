@@ -10,6 +10,7 @@ struct ContentView: View {
 
     private let registry: NavigationRegistry
 
+    @State private var showSplash = true
     @State private var isSidebarOpen = true
     @State private var activeGroupID: String
     @State private var activePageID: String
@@ -69,6 +70,17 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.42, dampingFraction: 0.88), value: isSidebarOpen)
         .animation(.interactiveSpring(response: 0.3, dampingFraction: 0.9), value: sidebarDragOffset)
+        .overlay {
+            if showSplash {
+                SplashView {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        showSplash = false
+                    }
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+            }
+        }
         .onAppear {
             reloadModules()
         }
@@ -265,6 +277,41 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel(isSidebarOpen ? "Close sidebar" : "Open sidebar")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button {
+                        activePageID = "global.logs"
+                    } label: {
+                        let isLogsActive = activePageID == "global.logs"
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(isLogsActive ? theme.primaryTextColor : theme.accentTextColor)
+                            .frame(width: 52, height: 52)
+                            .background(
+                                isLogsActive
+                                    ? AnyShapeStyle(theme.cardFillColor)
+                                    : AnyShapeStyle(.ultraThinMaterial),
+                                in: Circle()
+                            )
+                            .overlay {
+                                Circle()
+                                    .fill(
+                                        isLogsActive
+                                            ? (colorScheme == .dark ? .white.opacity(0.08) : .white.opacity(0.45))
+                                            : (colorScheme == .dark ? .white.opacity(0.04) : .white.opacity(0.35))
+                                    )
+                            }
+                            .overlay {
+                                Circle()
+                                    .stroke(
+                                        isLogsActive ? theme.accentTextColor.opacity(0.4) : theme.cardStrokeColor,
+                                        lineWidth: 1
+                                    )
+                            }
+                            .shadow(color: theme.contentShadowColor, radius: 14, x: 0, y: 8)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open logs")
+                }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
         }
@@ -394,7 +441,7 @@ struct ContentView: View {
                 GroupDefinition(id: "utilities", label: "Utilities", glyph: "UT", systemImage: "wrench.and.screwdriver", pageIDs: ["utility.shell"]),
                 GroupDefinition(id: "network", label: "Network", glyph: "NW", systemImage: "network", pageIDs: ["network.overview"])
             ],
-            globalPages: ["global.dashboard", "global.logs", "global.settings", "global.modules"],
+            globalPages: ["global.dashboard", "global.settings", "global.modules"],
             defaultGroup: "utilities",
             defaultPage: "global.dashboard"
         )
