@@ -4,20 +4,46 @@ on:
   push:
     branches:
       - stable
+  pull_request:
+    branches:
+      - stable
   workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  build:
-    name: ${{ matrix.os }} / ${{ matrix.feature }}
+  build-desktop:
+    name: ${{ matrix.artifact_name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        feature: [headless, gui]
+        include:
+          - os: ubuntu-latest
+            os_name: linux
+            feature: gui
+            artifact_name: arcadia-desktop-linux
+          - os: ubuntu-latest
+            os_name: linux
+            feature: headless
+            artifact_name: arcadia-desktop-linux-headless
+          - os: macos-latest
+            os_name: macos
+            feature: gui
+            artifact_name: arcadia-desktop-macos
+          - os: macos-latest
+            os_name: macos
+            feature: headless
+            artifact_name: arcadia-desktop-macos-headless
+          - os: windows-latest
+            os_name: windows
+            feature: gui
+            artifact_name: arcadia-desktop-windows
+          - os: windows-latest
+            os_name: windows
+            feature: headless
+            artifact_name: arcadia-desktop-windows-headless
 
     steps:
       - name: Checkout repository
@@ -36,14 +62,14 @@ jobs:
             libxkbcommon-x11-dev
 
       - name: Build Arcadia
-        run: cargo build -p arcadia --no-default-features --features ${{ matrix.feature }}
+        run: cargo build --manifest-path Desktop/Cargo.toml --target-dir target --no-default-features --features ${{ matrix.feature }}
 
       - name: Package binary (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $target = "dist/arcadia-${{ matrix.feature }}-windows.exe"
+          $target = "dist/${{ matrix.artifact_name }}.exe"
           Copy-Item "target/debug/arcadia.exe" $target
 
       - name: Package binary (macOS/Linux)
@@ -51,25 +77,57 @@ jobs:
         shell: bash
         run: |
           mkdir -p dist
-          os_name="$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')"
-          cp target/debug/arcadia "dist/arcadia-${{ matrix.feature }}-${os_name}"
+          cp target/debug/arcadia "dist/${{ matrix.artifact_name }}"
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.os }}-${{ matrix.feature }}
+          name: ${{ matrix.artifact_name }}
+          path: dist/*
+          if-no-files-found: error
+
+  build-mobile-ios:
+    name: arcadia-mobile-ios
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build iOS app (simulator)
+        shell: bash
+        run: |
+          xcodebuild \
+            -project Mobile/iOS/ArcadiaApp.xcodeproj \
+            -scheme ArcadiaApp \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath build/ios \
+            build
+
+      - name: Package iOS app
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp -R "build/ios/Build/Products/Release-iphonesimulator/ArcadiaApp.app" "dist/arcadia-mobile-ios.app"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: arcadia-mobile-ios
           path: dist/*
           if-no-files-found: error
 
   release:
     name: Create Stable Release
-    needs: build
+    needs: [build-desktop, build-mobile-ios]
     runs-on: ubuntu-latest
     steps:
       - name: Download matrix artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: build-*
+          pattern: arcadia-*
           path: release-assets
           merge-multiple: true
 
