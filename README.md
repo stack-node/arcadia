@@ -1,8 +1,8 @@
 # Arcadia
 
-**One Rust core. Three surfaces. Zero rent.**
+**One Rust core. One Python SDK. An infinite extension surface. Zero rent.**
 
-Arcadia is a multi-platform runtime and shell: a single `arcadia-core` crate owns every module, command, navigation structure, LAN protocol, and config schema — then two native surfaces (a GPUI desktop app and a SwiftUI iOS app) plus a CLI consume it. Business logic lives once. Surfaces read, render, and dispatch.
+Arcadia is a multi-platform runtime, shell, and — ultimately — an **open platform for building system-integrated applications**. Today: a single `arcadia-core` crate owns every module, command, navigation structure, LAN protocol, and config schema, consumed by two native surfaces (GPUI desktop, SwiftUI iOS) plus a CLI. Tomorrow: a Python library that gives any developer full OS reach and a first-class extension SDK for building apps — menu bar tools, custom IDEs, file explorers, widgets, shells — that run everywhere and belong to no vendor.
 
 Built on the same DNA as **[Holos](https://github.com/stack-node/holos)** — *utility over monetization, ownership over subscriptions* — but with a harder engineering mandate: **no duplicated truth between platforms, no hardcoded IDs in surface code, no growing if-else chains that break the next time a module is added.**
 
@@ -12,6 +12,7 @@ Built on the same DNA as **[Holos](https://github.com/stack-node/holos)** — *u
 
 - [Why Arcadia exists](#why-arcadia-exists)
 - [What Arcadia is](#what-arcadia-is)
+- [The vision — where this is going](#the-vision--where-this-is-going)
 - [What you can do with it now](#what-you-can-do-with-it-now)
 - [Development status](#development-status)
 - [Philosophy](#philosophy)
@@ -67,6 +68,97 @@ If something's missing, you add a module or extend `surface.snapshot` / `surface
 - **A navigation system** — page and group definitions live in `navigation.rs`, serialized to JSON for iOS, consumed by Desktop directly. No surface hardcodes page IDs.
 - **A thin-client protocol** — `surface.snapshot` mirrors host state (modules, nav registry, revision) to clients; `surface.patch` lets clients push changes back.
 - **A cross-platform core** — the same Rust crate (`arcadia-core`) builds as a staticlib for iOS (via UniFFI), a native library for Desktop GPUI, and a CLI binary.
+
+---
+
+## The vision — where this is going
+
+What Arcadia is *right now* is the foundation. What it's *becoming* is something more deliberate:
+
+**A platform where anyone can build system-integrated applications — without a vendor, without a subscription, without a degree in native systems programming.**
+
+### The Python library
+
+The next major layer is a Python SDK that exposes the full power of `arcadia-core` to any developer who can write a script. Not a watered-down scripting layer — full OS reach:
+
+- **File system** — read, write, watch, index
+- **Processes** — spawn, manage, pipe, monitor
+- **Networking** — LAN discovery, routing, peer communication
+- **Display** — render into Arcadia's native surfaces (Desktop GUI, iOS) from Python
+- **Shell** — execute commands, capture output, stream PTY sessions
+- **Config** — read and write module state, preferences, thin-client config
+- **Events** — hook into system events, timers, window focus, LAN peer state changes
+
+The goal is parity with what you'd get writing native Rust or Swift — but with a workflow where you open a file, write twenty lines, and have a running extension.
+
+### Extensions: the real product
+
+The Python SDK powers an **extension system**. Extensions are the unit of user-created capability in Arcadia. An extension can be:
+
+| Type | Examples |
+|------|---------|
+| **Internal app** | A custom shell, a task manager, a log viewer — rendered inside Arcadia's native UI just like the built-in Shell page |
+| **Widget** | A persistent overlay — system stats, a clock, a scratchpad, a LAN activity feed |
+| **Tool** | A headless background process — file watcher, sync agent, notification hook, cron-style automator |
+| **Surface extension** | A sidebar panel, a top-bar chip, a custom modal — extending the host UI without forking it |
+| **Device bridge** | Cross-machine extensions that route commands to LAN peers via the existing `remote-session` + `surface.*` protocol |
+
+Extensions register into the same `MODULE_REGISTRY` and `PAGE_DEFINITIONS` systems that built-in modules use. There is no separate "plugin API" — extensions are first-class modules. A menu bar tool is a module. A custom IDE panel is a navigation page. A background sync agent is a headless module with no UI. They all follow the same patterns the core enforces.
+
+### What this makes possible
+
+**For individuals:** build the exact tool you want. Bartender-style menu bar manager? Thirty lines of Python registering a widget module and a tray handler. A file explorer that opens on a keyboard shortcut and talks to your NAS over LAN? That's two extensions and a LAN peer config. A custom IDE with your own keybindings, your own terminal, your own sidebar? That's a surface extension composing built-in shell + your panels.
+
+**For teams:** share extension bundles instead of paying for another SaaS tool. A shared monitoring dashboard, a deployment helper, a standup widget — all running locally, all owned by you, all talking to each other over the same LAN protocol Arcadia already ships.
+
+**For the open-source community:** an ecosystem of extensions that anyone can fork, modify, and publish. No app store approval. No revenue split. No "premium tier." You write it, you run it, you share it if you want.
+
+### Why Python for the SDK
+
+Three reasons:
+
+1. **Reach** — more people can write Python than can write Rust or Swift. Lowering the barrier to extension authorship is the whole point.
+2. **Speed of iteration** — a Python extension reloads without a rebuild. The feedback loop for building a new tool should be seconds, not minutes.
+3. **Ecosystem** — the Python package index is enormous. An extension that needs to parse PDFs, call an API, process images, or run ML inference can reach for a pip package instead of re-implementing everything.
+
+The Rust core stays Rust. Performance-critical paths, protocol handling, LAN networking, config I/O, FFI to native surfaces — none of that moves to Python. The Python layer sits above it, calling into `arcadia-core` through a clean API boundary.
+
+### The development workflow target
+
+The experience we're building toward:
+
+```
+1. arcadia ext new my-tool          # scaffold a new extension
+2. edit my_tool/main.py             # write your logic
+3. arcadia ext dev my-tool          # hot-reload development mode
+4. arcadia ext install my-tool      # register with the local runtime
+5. share my_tool/ with anyone       # they install it the same way
+```
+
+No Xcode. No Cargo. No native toolchain required to write an extension. The native layer is already compiled and shipped — extension authors build *on top of it*, not inside it.
+
+### Cross-platform by design
+
+Extensions written against the Python SDK run on every surface Arcadia targets:
+
+- **macOS** — GPUI desktop, menu bar, CLI
+- **iOS** — SwiftUI surface (where the extension's UI contract is met)
+- **Linux** — headless or desktop
+- **Windows** — headless or desktop
+
+An extension that declares it renders a navigation page gets that page on every surface that supports pages. An extension that declares it's headless-only runs as a background service everywhere. Surface capabilities are declared, not assumed.
+
+### The priority order
+
+Building toward this in stages:
+
+1. **Now:** bulletproof the core — registry patterns, test coverage, CI, revision semantics *(done / in progress)*
+2. **Next:** Python bridge — `arcadia-core` callable from Python, initial OS API surface (file, process, shell, config)
+3. **Then:** extension loader — Python extensions register as modules at runtime; dev-mode hot reload
+4. **Then:** widget and surface extension contracts — render Python-driven UI into native surfaces
+5. **Then:** extension registry — discover, install, and share extensions; no central gatekeeper
+
+Each stage ships usable capability. Nothing waits for the whole roadmap to be done.
 
 ---
 
