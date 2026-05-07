@@ -1,0 +1,33 @@
+name: Core Tests
+
+on:
+  push:
+    branches:
+      - development
+      - main
+      - stable
+  pull_request:
+    branches:
+      - development
+      - main
+      - stable
+
+jobs:
+  test:
+    name: arcadia-core tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: Shared -> target
+
+      - name: Run core tests
+        run: cargo test -p arcadia-core --manifest-path Shared/Cargo.toml

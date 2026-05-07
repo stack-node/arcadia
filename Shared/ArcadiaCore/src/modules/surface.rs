@@ -14,7 +14,7 @@ pub const NAME: &str = "surface";
 
 static SURFACE_REVISION: AtomicU64 = AtomicU64::new(1);
 
-pub(crate) fn bump_surface_revision() {
+pub fn bump_surface_revision() {
     SURFACE_REVISION.fetch_add(1, Ordering::SeqCst);
 }
 
@@ -72,6 +72,7 @@ fn snapshot(_args: &[&str], _ctx: &ExecutionContext) -> String {
         modules: cfg.modules.clone(),
         revision,
         extra: serde_json::json!({
+            "schema_version": 1,
             "navigation_registry": navigation_registry,
         }),
     };
@@ -156,4 +157,79 @@ pub fn commands() -> &'static [ModuleCommand] {
             run: patch,
         },
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_snapshot_valid_json() {
+        let json = r#"{"modules":{"shell":true,"net":false},"revision":5,"extra":{}}"#;
+        let parsed = parse_surface_snapshot(json);
+        assert_eq!(parsed.revision, 5);
+        assert!(parsed.modules.iter().any(|(n, e)| n == "shell" && *e));
+        assert!(parsed.modules.iter().any(|(n, e)| n == "net" && !e));
+    }
+
+    #[test]
+    fn parse_snapshot_returns_default_on_invalid() {
+        let parsed = parse_surface_snapshot("not json");
+        assert_eq!(parsed.revision, 0);
+        assert!(parsed.modules.is_empty());
+        assert!(parsed.navigation_registry.is_none());
+    }
+
+    #[test]
+    fn parse_snapshot_extracts_navigation_registry() {
+        use crate::navigation::NavigationRegistryOwned;
+        let registry = NavigationRegistryOwned::from_static_registry();
+        let registry_val = serde_json::to_value(&registry).unwrap();
+        let snap = SurfaceSnapshot {
+            modules: Default::default(),
+            revision: 1,
+            extra: serde_json::json!({ "schema_version": 1, "navigation_registry": registry_val }),
+        };
+        let json = serde_json::to_string(&snap).unwrap();
+        let parsed = parse_surface_snapshot(&json);
+        let nav = parsed.navigation_registry.expect("navigation_registry must deserialize");
+        assert!(!nav.pages.is_empty());
+        assert!(!nav.groups.is_empty());
+    }
+
+    #[test]
+    fn patch_json_includes_all_fields() {
+        let json = patch_json_modules_set("shell", true, Some("client-abc"));
+        assert!(json.contains(r#""op":"modules_set""#));
+        assert!(json.contains(r#""name":"shell""#));
+        assert!(json.contains(r#""enabled":true"#));
+        assert!(json.contains(r#""client_id":"client-abc""#));
+    }
+
+    #[test]
+    fn patch_json_omits_client_id_when_none() {
+        let json = patch_json_modules_set("net", false, None);
+        assert!(!json.contains("client_id"));
+    }
+
+    #[test]
+    fn surface_patch_modules_set_round_trips() {
+        let json = patch_json_modules_set("shell", true, Some("abc"));
+        let patches: Vec<SurfacePatch> = serde_json::from_str(&json).unwrap();
+        assert_eq!(patches.len(), 1);
+        match &patches[0] {
+            SurfacePatch::ModulesSet { name, enabled, client_id } => {
+                assert_eq!(name, "shell");
+                assert!(*enabled);
+                assert_eq!(client_id.as_deref(), Some("abc"));
+            }
+        }
+    }
+
+    #[test]
+    fn snapshot_module_rows_helper() {
+        let json = r#"{"modules":{"shell":true},"revision":1,"extra":{}}"#;
+        let rows = snapshot_module_rows(json);
+        assert!(rows.iter().any(|(n, e)| n == "shell" && *e));
+    }
 }

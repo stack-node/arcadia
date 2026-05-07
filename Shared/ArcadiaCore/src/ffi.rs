@@ -101,10 +101,10 @@ pub fn set_module_enabled(name: String, enabled: bool) -> String {
     let result = cfg.set_module_state(&name, enabled);
     match result {
         Ok(()) => match cfg.save() {
-            Ok(()) => format!(
-                "Module {name} {}",
-                if enabled { "enabled" } else { "disabled" }
-            ),
+            Ok(()) => {
+                modules::surface::bump_surface_revision();
+                format!("Module {name} {}", if enabled { "enabled" } else { "disabled" })
+            }
             Err(e) => format!("Error saving config: {e}"),
         },
         Err(e) => e,
@@ -124,10 +124,10 @@ pub fn set_module_enabled_with_requirements(name: String, enabled: bool) -> Stri
     };
     match result {
         Ok(()) => match cfg.save() {
-            Ok(()) => format!(
-                "Module {name} {}",
-                if enabled { "enabled" } else { "disabled" }
-            ),
+            Ok(()) => {
+                modules::surface::bump_surface_revision();
+                format!("Module {name} {}", if enabled { "enabled" } else { "disabled" })
+            }
             Err(e) => format!("Error saving config: {e}"),
         },
         Err(e) => e,

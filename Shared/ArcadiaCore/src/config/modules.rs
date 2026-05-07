@@ -229,3 +229,141 @@ impl ConfigFile for ModulesConfig {
         changed
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base() -> ModulesConfig {
+        ModulesConfig::default()
+    }
+
+    #[test]
+    fn default_surface_enabled_others_disabled() {
+        let cfg = base();
+        assert_eq!(cfg.modules.get(SURFACE_MODULE_NAME), Some(&true));
+        assert_eq!(cfg.modules.get(SHELL_MODULE_NAME), Some(&false));
+        assert_eq!(cfg.modules.get(NET_MODULE_NAME), Some(&false));
+        assert_eq!(cfg.modules.get(LAN_MODULE_NAME), Some(&false));
+    }
+
+    #[test]
+    fn set_module_state_enables_known_module() {
+        let mut cfg = base();
+        cfg.set_module_state(SHELL_MODULE_NAME, true).unwrap();
+        assert_eq!(cfg.modules.get(SHELL_MODULE_NAME), Some(&true));
+    }
+
+    #[test]
+    fn set_module_state_blocks_enable_when_dep_missing() {
+        let mut cfg = base();
+        // lan requires net; net is disabled
+        let err = cfg.set_module_state(LAN_MODULE_NAME, true).unwrap_err();
+        assert!(err.contains("net"), "error should mention missing dep: {err}");
+    }
+
+    #[test]
+    fn set_module_state_blocks_disable_when_dependent_enabled() {
+        let mut cfg = base();
+        cfg.set_module_state(NET_MODULE_NAME, true).unwrap();
+        cfg.set_module_state(LAN_MODULE_NAME, true).unwrap();
+        let err = cfg.set_module_state(NET_MODULE_NAME, false).unwrap_err();
+        assert!(err.contains("lan"), "error should mention blocking dependent: {err}");
+    }
+
+    #[test]
+    fn enable_with_requirements_transitively_enables_deps() {
+        let mut cfg = base();
+        cfg.enable_with_requirements(LAN_MODULE_NAME).unwrap();
+        assert_eq!(cfg.modules.get(NET_MODULE_NAME), Some(&true));
+        assert_eq!(cfg.modules.get(LAN_MODULE_NAME), Some(&true));
+    }
+
+    #[test]
+    fn enable_with_requirements_remote_session_enables_net_and_lan() {
+        let mut cfg = base();
+        cfg.enable_with_requirements(REMOTE_SESSION_MODULE_NAME).unwrap();
+        assert_eq!(cfg.modules.get(NET_MODULE_NAME), Some(&true));
+        assert_eq!(cfg.modules.get(LAN_MODULE_NAME), Some(&true));
+        assert_eq!(cfg.modules.get(REMOTE_SESSION_MODULE_NAME), Some(&true));
+    }
+
+    #[test]
+    fn missing_requirements_for_lan_without_net() {
+        let cfg = base();
+        let missing = cfg.missing_requirements_for(LAN_MODULE_NAME).unwrap();
+        assert!(missing.contains(&NET_MODULE_NAME.to_string()));
+    }
+
+    #[test]
+    fn missing_requirements_empty_when_dep_met() {
+        let mut cfg = base();
+        cfg.set_module_state(NET_MODULE_NAME, true).unwrap();
+        let missing = cfg.missing_requirements_for(LAN_MODULE_NAME).unwrap();
+        assert!(missing.is_empty());
+    }
+
+    #[test]
+    fn missing_requirements_unknown_module_errors() {
+        let cfg = base();
+        assert!(cfg.missing_requirements_for("does-not-exist").is_err());
+    }
+
+    #[test]
+    fn merge_defaults_migrates_legacy_lan_key() {
+        let mut cfg = ModulesConfig {
+            modules: {
+                let mut m = std::collections::BTreeMap::new();
+                m.insert(LEGACY_LAN_MODULE_NAME.to_string(), true);
+                m
+            },
+        };
+        let changed = cfg.merge_defaults();
+        assert!(changed);
+        assert!(!cfg.modules.contains_key(LEGACY_LAN_MODULE_NAME));
+        assert_eq!(cfg.modules.get(LAN_MODULE_NAME), Some(&true));
+    }
+
+    #[test]
+    fn merge_defaults_adds_missing_modules() {
+        let mut cfg = ModulesConfig { modules: std::collections::BTreeMap::new() };
+        let changed = cfg.merge_defaults();
+        assert!(changed);
+        for manifest in MODULE_REGISTRY {
+            assert!(
+                cfg.modules.contains_key(manifest.name),
+                "merge_defaults must add missing module '{}'",
+                manifest.name
+            );
+        }
+    }
+
+    #[test]
+    fn manifest_for_known_module() {
+        let m = ModulesConfig::manifest_for(SHELL_MODULE_NAME).unwrap();
+        assert_eq!(m.name, SHELL_MODULE_NAME);
+    }
+
+    #[test]
+    fn manifest_for_unknown_returns_none() {
+        assert!(ModulesConfig::manifest_for("totally-fake").is_none());
+    }
+
+    #[test]
+    fn set_module_state_unknown_module_errors() {
+        let mut cfg = base();
+        assert!(cfg.set_module_state("ghost-module", true).is_err());
+    }
+
+    #[test]
+    fn shell_motd_requires_shell() {
+        let mut cfg = base();
+        // shell-motd requires shell; shell disabled → enable should fail
+        let err = cfg.set_module_state(SHELL_MOTD_MODULE_NAME, true).unwrap_err();
+        assert!(err.contains("shell"), "error should mention shell: {err}");
+        // enable shell first, then motd should work
+        cfg.set_module_state(SHELL_MODULE_NAME, true).unwrap();
+        cfg.set_module_state(SHELL_MOTD_MODULE_NAME, true).unwrap();
+        assert_eq!(cfg.modules.get(SHELL_MOTD_MODULE_NAME), Some(&true));
+    }
+}

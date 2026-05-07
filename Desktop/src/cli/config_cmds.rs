@@ -178,14 +178,18 @@ fn modules_set(key: &str, value: &str) -> Result<(), String> {
         _ => return Err("Module value must be true or false".to_string()),
     };
     cfg.set_module_state(key, parsed)?;
-    cfg.save().map_err(|err| err.to_string())
+    cfg.save().map_err(|err| err.to_string())?;
+    arcadia_core::modules::surface::bump_surface_revision();
+    Ok(())
 }
 
 fn modules_reset(target: Option<&str>) -> Result<(), String> {
     match target {
-        None => ModulesConfig::default()
-            .save()
-            .map_err(|err| err.to_string()),
+        None => {
+            ModulesConfig::default().save().map_err(|err| err.to_string())?;
+            arcadia_core::modules::surface::bump_surface_revision();
+            Ok(())
+        }
         Some(key) => {
             let defaults = ModulesConfig::default();
             let default_value = defaults
@@ -195,7 +199,9 @@ fn modules_reset(target: Option<&str>) -> Result<(), String> {
                 .ok_or_else(|| "Unknown module key".to_string())?;
             let mut cfg = ModulesConfig::load_or_create().map_err(|err| err.to_string())?;
             cfg.set_module_state(key, default_value)?;
-            cfg.save().map_err(|err| err.to_string())
+            cfg.save().map_err(|err| err.to_string())?;
+            arcadia_core::modules::surface::bump_surface_revision();
+            Ok(())
         }
     }
 }
