@@ -2,7 +2,10 @@ use std::env;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use arcadia_core::config::modules::{ModulesConfig, SHELL_MODULE_NAME, SHELL_MOTD_MODULE_NAME};
+use arcadia_core::config::modules::{
+    ModulesConfig, LAN_MODULE_NAME, REMOTE_SESSION_MODULE_NAME, SHELL_MODULE_NAME,
+    SHELL_MOTD_MODULE_NAME,
+};
 use arcadia_core::modules;
 use arcadia_core::modules::surface::snapshot_module_rows;
 use arcadia_core::config::ConfigFile;
@@ -69,7 +72,7 @@ impl ArcadiaRoot {
             .into_os_string()
             .into_string()
             .unwrap_or_else(|_| "cwd: unavailable".to_string());
-        ArcadiaRoot {
+        let mut root = ArcadiaRoot {
             title: gpui::SharedString::new_static("Arcadia"),
             active_page_id: navigation::DEFAULT_PAGE_ID,
             active_group_id: navigation::DEFAULT_GROUP_ID,
@@ -102,7 +105,21 @@ impl ArcadiaRoot {
             remote_route: None,
             lan_discovered_peers: Vec::new(),
             lan_command_feedback: String::new(),
+        };
+
+        // Thin client bootstrap: same shape as ExecutionContext.net_as (e.g. lan:192.168.1.10).
+        if let Ok(route) = env::var("ARCADIA_NET_AS") {
+            let trimmed = route.trim();
+            if !trimmed.is_empty()
+                && root.is_module_enabled(LAN_MODULE_NAME)
+                && root.is_module_enabled(REMOTE_SESSION_MODULE_NAME)
+            {
+                root.remote_route = Some(trimmed.to_string());
+                root.reload_modules();
+            }
         }
+
+        root
     }
 
     pub fn reload_modules(&mut self) {

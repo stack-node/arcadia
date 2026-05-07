@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::modules::ModulesConfig;
 use crate::config::ConfigFile;
+use crate::navigation;
 use crate::modules::{ExecutionContext, ModuleCommand};
 
 pub const NAME: &str = "surface";
@@ -27,9 +28,14 @@ fn snapshot(_args: &[&str], _ctx: &ExecutionContext) -> String {
     let Ok(cfg) = ModulesConfig::load_or_create() else {
         return "{}".to_string();
     };
+    let navigation_registry: serde_json::Value =
+        serde_json::from_str(&navigation::default_navigation_registry_json())
+            .unwrap_or_else(|_| serde_json::json!({}));
     let snap = SurfaceSnapshot {
         modules: cfg.modules.clone(),
-        extra: serde_json::json!({}),
+        extra: serde_json::json!({
+            "navigation_registry": navigation_registry,
+        }),
     };
     serde_json::to_string(&snap).unwrap_or_else(|_| "{}".to_string())
 }
@@ -90,7 +96,7 @@ pub fn commands() -> &'static [ModuleCommand] {
     &[
         ModuleCommand {
             name: "snapshot",
-            description: "JSON SurfaceSnapshot (modules + extra bucket for future features)",
+            description: "JSON SurfaceSnapshot (modules + extra.navigation_registry + future buckets)",
             run: snapshot,
         },
         ModuleCommand {
