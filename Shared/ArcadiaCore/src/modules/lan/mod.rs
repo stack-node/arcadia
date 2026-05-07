@@ -24,6 +24,23 @@ use protocol::{
 
 pub use discovery::{discover_lan_peers, start_service, stop_service};
 
+pub struct LanServiceInfo {
+    pub running: bool,
+    pub port: u16,
+    pub hostname: String,
+    pub module_enabled: bool,
+}
+
+pub fn lan_service_info() -> LanServiceInfo {
+    use std::sync::atomic::Ordering;
+    LanServiceInfo {
+        running: discovery::SERVICE_RUNNING.load(Ordering::SeqCst),
+        port: protocol::DISCOVERY_PORT,
+        hostname: discovery::local_hostname(),
+        module_enabled: discovery::lan_enabled(),
+    }
+}
+
 /// Row for LAN Nodes UI (desktop / callers); mirrors in-memory peer records.
 #[derive(Clone, Debug)]
 pub struct LanKnownPeer {

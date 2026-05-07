@@ -161,6 +161,12 @@ impl ArcadiaRoot {
         if self.active_page_id.as_str() == "global.modules" {
             return div().w_full().p_6().child(self.modules_panel(cx, is_dark));
         }
+        if self.active_page_id.as_str() == "network.overview" {
+            return div()
+                .w_full()
+                .p_6()
+                .child(self.network_overview_panel(cx, is_dark));
+        }
         if self.active_page_id.as_str() == "network.nodes" {
             return div()
                 .w_full()

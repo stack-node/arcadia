@@ -202,11 +202,13 @@ pub fn load_all() {
         shell_motd::NAME,
         surface::NAME,
     ];
-    lan::start_service();
 
     if let Err(err) = ModulesConfig::load_or_create() {
         eprintln!("Failed to load modules config: {err}");
     }
+
+    // Service binds port regardless; respects lan_enabled() per-request.
+    lan::start_service();
 }
 
 pub fn shutdown_all() {

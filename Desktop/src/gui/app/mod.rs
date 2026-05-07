@@ -7,6 +7,7 @@ mod lan_nodes;
 mod lifecycle;
 mod modules_page;
 mod navigation;
+mod network_overview;
 mod root;
 mod shell;
 mod sidebar;
