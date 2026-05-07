@@ -36,7 +36,15 @@ pub fn lan_enabled() -> bool {
 pub fn local_hostname() -> String {
     env::var("HOSTNAME")
         .or_else(|_| env::var("COMPUTERNAME"))
-        .unwrap_or_else(|_| "unknown-host".to_string())
+        .unwrap_or_else(|_| {
+            std::process::Command::new("hostname")
+                .output()
+                .ok()
+                .and_then(|o| String::from_utf8(o.stdout).ok())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "unknown-host".to_string())
+        })
 }
 
 pub fn resolve_target(target: &str) -> Result<SocketAddrV4, String> {
@@ -89,10 +97,7 @@ pub fn parse_targets(range: Option<&str>) -> Result<Vec<SocketAddrV4>, String> {
     }
 }
 
-/// UDP discovery only (same semantics as `lan.scan`); returns sorted `(ip, hostname)` pairs.
-pub fn discover_lan_peers(range: Option<&str>) -> Result<Vec<(String, String)>, String> {
-    let targets = parse_targets(range)?;
-
+fn discover_at(targets: Vec<SocketAddrV4>) -> Result<Vec<(String, String)>, String> {
     let Ok(socket) = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)) else {
         return Err("Failed to bind UDP socket for lan.scan".to_string());
     };
@@ -101,8 +106,8 @@ pub fn discover_lan_peers(range: Option<&str>) -> Result<Vec<(String, String)>, 
     }
     let _ = socket.set_read_timeout(Some(Duration::from_millis(100)));
 
-    for target in targets {
-        let _ = socket.send_to(DISCOVERY_REQUEST.as_bytes(), target);
+    for target in &targets {
+        let _ = socket.send_to(DISCOVERY_REQUEST.as_bytes(), *target);
     }
 
     let deadline = Instant::now() + Duration::from_millis(SCAN_WAIT_MS);
@@ -129,30 +134,52 @@ pub fn discover_lan_peers(range: Option<&str>) -> Result<Vec<(String, String)>, 
     Ok(peers.into_iter().collect())
 }
 
+/// UDP discovery only (same semantics as `lan.scan`); returns sorted `(ip, hostname)` pairs.
+pub fn discover_lan_peers(range: Option<&str>) -> Result<Vec<(String, String)>, String> {
+    discover_at(parse_targets(range)?)
+}
+
 pub fn scan(args: &[&str], _context: &ExecutionContext) -> String {
     let mut range: Option<&str> = None;
+    let mut include_self = false;
     let mut i = 0;
     while i < args.len() {
         match args[i] {
             "--range" => {
                 let Some(value) = args.get(i + 1) else {
-                    return "Usage: lan.scan [--range <CIDR-or-ip>]".to_string();
+                    return "Usage: lan.scan [--range <CIDR-or-ip>] [--self]".to_string();
                 };
                 range = Some(*value);
                 i += 2;
             }
+            "--self" => {
+                include_self = true;
+                i += 1;
+            }
             unknown => {
                 return format!(
-                    "Unknown argument: {unknown}. Usage: lan.scan [--range <CIDR-or-ip>]"
+                    "Unknown argument: {unknown}. Usage: lan.scan [--range <CIDR-or-ip>] [--self]"
                 );
             }
         }
     }
 
-    match discover_lan_peers(range) {
-        Ok(peers) if peers.is_empty() => {
-            "No Arcadia peers found with LAN module enabled".to_string()
-        }
+    let mut targets = match parse_targets(range) {
+        Ok(t) => t,
+        Err(msg) => return msg,
+    };
+    if include_self {
+        targets.push(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), DISCOVERY_PORT));
+    }
+
+    match discover_at(targets) {
+        Ok(peers) if peers.is_empty() => [
+            "No Arcadia peers found on LAN.",
+            "  - Peer must have LAN module enabled to respond",
+            "  - Try: lan.scan --self  (tests local service via loopback)",
+            "  - Try: lan.status       (check service is running)",
+        ]
+        .join("\n"),
         Ok(peers) => {
             let mut lines = vec!["Arcadia LAN peers:".to_string()];
             for (ip, hostname) in peers {
@@ -162,6 +189,16 @@ pub fn scan(args: &[&str], _context: &ExecutionContext) -> String {
         }
         Err(msg) => msg,
     }
+}
+
+pub fn service_status(_args: &[&str], _context: &ExecutionContext) -> String {
+    let running = SERVICE_RUNNING.load(Ordering::SeqCst);
+    let enabled = lan_enabled();
+    let hostname = local_hostname();
+    format!(
+        "LAN service: {}\nPort: {DISCOVERY_PORT}\nHostname: {hostname}\nModule enabled: {enabled}",
+        if running { "running" } else { "stopped" }
+    )
 }
 
 pub fn start_service() {

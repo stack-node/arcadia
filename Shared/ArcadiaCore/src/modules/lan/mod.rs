@@ -144,8 +144,13 @@ pub fn commands() -> &'static [ModuleCommand] {
     &[
         ModuleCommand {
             name: "scan",
-            description: "discover Arcadia LAN peers (--range supported)",
+            description: "discover Arcadia LAN peers (--range, --self supported)",
             run: discovery::scan,
+        },
+        ModuleCommand {
+            name: "status",
+            description: "show LAN service status, port, and local hostname",
+            run: discovery::service_status,
         },
         ModuleCommand {
             name: "node",
