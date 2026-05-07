@@ -59,6 +59,14 @@ Small-tool ecosystems trend the same way: **paywalls, subscriptions, feature fla
 
 If something's missing, you add a module or extend `surface.snapshot` / `surface.patch`. You don't buy another app.
 
+There's a second reason, less technical but just as important.
+
+A lot of people grew up in software environments where the line between user, developer, toolmaker, and creator basically dissolved — game modding scenes, jailbreak ecosystems, Emacs, early web chaos. Environments where you could bend the software, remix the system, blur the boundary between using a tool and building inside it. Those environments permanently change how you think about computing. You stop seeing apps as products and start seeing them as constrained runtimes.
+
+Most modern software feels closed afterward.
+
+Arcadia is an attempt to restore that feeling — but for the desktop itself, with an actual engineering foundation underneath it instead of accumulated chaos.
+
 ---
 
 ## What Arcadia is
@@ -75,7 +83,51 @@ If something's missing, you add a module or extend `surface.snapshot` / `surface
 
 What Arcadia is *right now* is the foundation. What it's *becoming* is something more deliberate:
 
-**A platform where anyone can build system-integrated applications — without a vendor, without a subscription, without a degree in native systems programming.**
+**A programmable personal computing substrate. A unified interaction layer above the OS where users operate *inside* the architecture — not merely use software built on top of it.**
+
+Not an app. Not a framework. Not a toolkit.
+
+A runtime that you inhabit and reshape.
+
+### The real category
+
+Arcadia sits between several things that exist and combines them in a way nothing currently does:
+
+- An **application framework** — native surfaces, layout system, module lifecycle
+- A **shell** — command routing, LAN awareness, headless-host patterns
+- A **local-first app platform** — config ownership, no vendor, no cloud dependency
+- A **programmable UI fabric** — extensions that render into native surfaces as first-class pages
+
+The closest historical analogies are not other desktop frameworks. They're environments like **HyperCard**, **Smalltalk**, **Emacs**, **Garry's Mod**, **Hammerspoon**, **Quartz Composer**, **BetterTouchTool**, **KDE Plasma scripting**, and old-school **jailbreak ecosystems** — environments where the line between user, developer, toolmaker, and creator dissolved.
+
+What those environments had in common: **the system itself was meant to be inhabited and reshaped.** Users started by doing the basic thing and ended up building systems inside systems — admin frameworks, UI toolkits, protocol adapters, entire economies — because the substrate let them.
+
+That's the energy Arcadia is trying to restore. Not aesthetically. In *agency*.
+
+### The tension — and why it's already solved
+
+Arcadia's core architecture is deliberately rigid:
+
+- centralized registries
+- canonical state
+- deterministic structure
+- controlled capability routing
+- explicit schemas
+
+That produces coherence. But the concern with that kind of discipline is that it creates activation energy against new ideas. Every new capability has to justify itself in terms of registries, schemas, surface compatibility, state ownership. That cognitive overhead can quietly kill creativity.
+
+The Python extension layer solves this. It separates two things that should always be separate:
+
+| Layer | Character | Enforces |
+|-------|-----------|---------|
+| **Core** (`arcadia-core`, Rust) | Disciplined | Identity, state consistency, capability routing, surface sync, lifecycle, security, cross-platform |
+| **Extension layer** (Python SDK) | Deliberately messy | Nothing. Be weird. Move fast. Break your own conventions. |
+
+The core stays disciplined. The edges stay chaotic.
+
+That balance is not a compromise — it's the architecture that successful long-lived systems always converge toward. Unix kernel / shell chaos. Browser engine / arbitrary JS. Git object model / messy workflows. Game engines / mod scripting. Emacs runtime / user mutation. Garry's Mod engine / Lua ecosystem.
+
+The projects that become culturally important manage both simultaneously. Freedom without structure collapses. Structure without freedom stagnates. Arcadia is attempting to do both at once, at different layers, on purpose.
 
 ### The Python library
 
@@ -91,6 +143,8 @@ The next major layer is a Python SDK that exposes the full power of `arcadia-cor
 
 The goal is parity with what you'd get writing native Rust or Swift — but with a workflow where you open a file, write twenty lines, and have a running extension.
 
+The Rust core stays Rust. Performance-critical paths, protocol handling, LAN networking, config I/O, FFI to native surfaces — none of that moves to Python. Python sits above it, calling into `arcadia-core` through a clean API boundary.
+
 ### Extensions: the real product
 
 The Python SDK powers an **extension system**. Extensions are the unit of user-created capability in Arcadia. An extension can be:
@@ -103,11 +157,15 @@ The Python SDK powers an **extension system**. Extensions are the unit of user-c
 | **Surface extension** | A sidebar panel, a top-bar chip, a custom modal — extending the host UI without forking it |
 | **Device bridge** | Cross-machine extensions that route commands to LAN peers via the existing `remote-session` + `surface.*` protocol |
 
-Extensions register into the same `MODULE_REGISTRY` and `PAGE_DEFINITIONS` systems that built-in modules use. There is no separate "plugin API" — extensions are first-class modules. A menu bar tool is a module. A custom IDE panel is a navigation page. A background sync agent is a headless module with no UI. They all follow the same patterns the core enforces.
+Extensions register into the same `MODULE_REGISTRY` and `PAGE_DEFINITIONS` systems that built-in modules use. **There is no separate "plugin API."** Extensions are first-class modules. A menu bar tool is a module. A custom IDE panel is a navigation page. A background sync agent is a headless module with no UI.
+
+This matters. When extensions are first-class, they inherit interoperability automatically. Navigation consistency emerges naturally. State becomes composable. Extensions can cooperate without bespoke glue. The registry system — which looks like a constraint from the outside — becomes an advantage the moment you have more than one extension running.
+
+If the extension system ever starts to feel like "plugins bolted onto a real app," something has gone wrong. The shell, the widgets, the internal tools, the user-created apps — they are all equally real inside the same runtime.
 
 ### What this makes possible
 
-**For individuals:** build the exact tool you want. Bartender-style menu bar manager? Thirty lines of Python registering a widget module and a tray handler. A file explorer that opens on a keyboard shortcut and talks to your NAS over LAN? That's two extensions and a LAN peer config. A custom IDE with your own keybindings, your own terminal, your own sidebar? That's a surface extension composing built-in shell + your panels.
+**For individuals:** build the exact tool you want. Bartender-style menu bar manager? Thirty lines of Python registering a widget module and a tray handler. A file explorer that opens on a keyboard shortcut and talks to your NAS over LAN? Two extensions and a LAN peer config. A custom IDE with your own keybindings, your own terminal, your own sidebar? A surface extension composing built-in shell + your panels.
 
 **For teams:** share extension bundles instead of paying for another SaaS tool. A shared monitoring dashboard, a deployment helper, a standup widget — all running locally, all owned by you, all talking to each other over the same LAN protocol Arcadia already ships.
 
@@ -115,17 +173,12 @@ Extensions register into the same `MODULE_REGISTRY` and `PAGE_DEFINITIONS` syste
 
 ### Why Python for the SDK
 
-Three reasons:
-
 1. **Reach** — more people can write Python than can write Rust or Swift. Lowering the barrier to extension authorship is the whole point.
-2. **Speed of iteration** — a Python extension reloads without a rebuild. The feedback loop for building a new tool should be seconds, not minutes.
-3. **Ecosystem** — the Python package index is enormous. An extension that needs to parse PDFs, call an API, process images, or run ML inference can reach for a pip package instead of re-implementing everything.
-
-The Rust core stays Rust. Performance-critical paths, protocol handling, LAN networking, config I/O, FFI to native surfaces — none of that moves to Python. The Python layer sits above it, calling into `arcadia-core` through a clean API boundary.
+2. **Iteration speed** — a Python extension reloads without a rebuild. The feedback loop for building a new tool should be seconds, not minutes.
+3. **Ecosystem** — PyPI is enormous. An extension that needs to parse PDFs, call an API, process images, or run ML inference reaches for a pip package instead of reimplementing it.
+4. **Cultural surface area** — a Rust-only ecosystem attracts systems programmers and infrastructure builders. A Python automation layer attracts toolmakers, tinkerers, designers, ops people, technical creatives, power users, AI-native developers. That's a much larger and more interesting group of people to build with.
 
 ### The development workflow target
-
-The experience we're building toward:
 
 ```
 1. arcadia ext new my-tool          # scaffold a new extension
@@ -149,8 +202,6 @@ Extensions written against the Python SDK run on every surface Arcadia targets:
 An extension that declares it renders a navigation page gets that page on every surface that supports pages. An extension that declares it's headless-only runs as a background service everywhere. Surface capabilities are declared, not assumed.
 
 ### The priority order
-
-Building toward this in stages:
 
 1. **Now:** bulletproof the core — registry patterns, test coverage, CI, revision semantics *(done / in progress)*
 2. **Next:** Python bridge — `arcadia-core` callable from Python, initial OS API surface (file, process, shell, config)
@@ -211,6 +262,12 @@ Known gaps are tracked in-repo instead of pretending shipping equals finished.
 
 **Extend the registry, not scatter `if pageId == …`.**
 See `AGENTS.md` for the full list of anti-patterns we refuse to write.
+
+**Discipline at the core. Chaos at the edges. On purpose.**
+
+The architectural discipline of `arcadia-core` — registries, schemas, canonical state, no hardcoded IDs — exists to make the extension layer *safe to be chaotic*. Strict boundaries in the core mean extensions don't need to be strict. An extension can be messy, experimental, surface-specific, fast-moving, structurally impure, and weird. It won't corrupt the runtime underneath it.
+
+Most software chooses: freedom without structure, or structure without freedom. Arcadia is attempting both at different layers simultaneously. The core enforces coherence. The extension layer is where experimentation, exceptions, and "this only exists here" decisions belong.
 
 **Personal tool energy, public repo.**
 If Arcadia helps others, great — that's bonus. The goal is a system you own, can fork, and can route across machines you trust.
