@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 mod entry;
 mod lan_nodes;
+mod late;
 mod lifecycle;
 mod modules_page;
 mod navigation;
@@ -76,6 +77,7 @@ pub struct ArcadiaRoot {
     pub shell_history: Vec<String>,
     pub shell_input: String,
     pub shell_focus: FocusHandle,
+    pub late_compose_focus: FocusHandle,
     pub shell_cursor: usize,
     pub shell_command_history: Vec<String>,
     pub shell_history_index: Option<usize>,
@@ -111,6 +113,10 @@ pub struct ArcadiaRoot {
     pub lan_service_feedback: String,
     pub pending_lan_port_kill_prompt: Option<String>,
     pub lan_poll_task_started: bool,
+    pub late_poll_task_started: bool,
+    pub late_last_revision: u64,
+    pub late_active_room: u32,
+    pub late_compose_text: String,
 }
 
 impl ArcadiaRoot {

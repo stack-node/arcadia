@@ -17,6 +17,7 @@ impl Render for ArcadiaRoot {
         self.sync_peer_remote_exec_side_effects(window, cx);
         self.ensure_shell_caret_task(window, cx);
         self.ensure_lan_poll_task(window, cx);
+        self.ensure_late_poll_task(window, cx);
         if self.tui_session.is_some() {
             self.sync_tui_size(window);
         }
@@ -93,21 +94,25 @@ impl Render for ArcadiaRoot {
                         active_page_glyph,
                         is_dark,
                     ))
-                    .child(if self.active_page_id.as_str() == "utility.shell" {
-                        div()
-                            .flex_1()
-                            .min_h_0()
-                            .w_full()
-                            .id("arcadia-page-shell")
-                            .child(self.render_active_content(window, cx, active_page, is_dark))
-                    } else {
-                        div()
-                            .flex_1()
-                            .w_full()
-                            .id("arcadia-page-scroll")
-                            .overflow_y_scroll()
-                            .child(self.render_active_content(window, cx, active_page, is_dark))
-                    }),
+                    .child(
+                        if self.active_page_id.as_str() == "utility.shell"
+                            || self.active_page_id.as_str() == "late.now_playing"
+                        {
+                            div()
+                                .flex_1()
+                                .min_h_0()
+                                .w_full()
+                                .id("arcadia-page-full")
+                                .child(self.render_active_content(window, cx, active_page, is_dark))
+                        } else {
+                            div()
+                                .flex_1()
+                                .w_full()
+                                .id("arcadia-page-scroll")
+                                .overflow_y_scroll()
+                                .child(self.render_active_content(window, cx, active_page, is_dark))
+                        },
+                    ),
             )
             .child(self.requirements_modal(cx, is_dark))
             .child(self.kill_existing_lan_modal(cx, is_dark))
