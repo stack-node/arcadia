@@ -29,11 +29,27 @@ pub struct ModuleToggleResult {
     pub missing_requirements: Vec<String>,
 }
 
+#[derive(uniffi::Record)]
+pub struct RemoteMirrorDrain {
+    pub lines: Vec<String>,
+    /// Host handled inbound NODE_EXEC — surfaces showing **local** state should resync from disk / LAN snapshot.
+    pub sync_local_surface: bool,
+}
+
 /// Set the config directory path. Must be called before any other API on iOS.
 /// Desktop callers skip this — $HOME is used by default.
 #[uniffi::export]
 pub fn set_config_root_path(path: String) {
     crate::config::set_config_root(std::path::PathBuf::from(path));
+}
+
+/// Drain mirrored NODE_EXEC transcript lines + host UI sync flag (reload modules when showing local state).
+#[uniffi::export]
+pub fn drain_remote_mirror_batch() -> RemoteMirrorDrain {
+    RemoteMirrorDrain {
+        lines: modules::remote_mirror::drain_formatted_mirror_lines(),
+        sync_local_surface: modules::remote_mirror::take_host_ui_sync_pending(),
+    }
 }
 
 /// Execute a command by dot-separated token (e.g. "lan.scan").

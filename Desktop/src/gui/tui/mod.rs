@@ -11,7 +11,7 @@ mod vt_history;
 
 pub(crate) use ansi_line::shell_history_line;
 pub(crate) use cd_builtin::resolve_simple_cd;
-pub(crate) use vt_history::vt100_row_for_shell_history;
 pub use colors::*;
 pub use keys::*;
 pub use session::*;
+pub(crate) use vt_history::vt100_row_for_shell_history;

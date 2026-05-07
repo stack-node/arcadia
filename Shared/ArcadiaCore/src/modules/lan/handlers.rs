@@ -9,7 +9,7 @@ use super::config::{
 use super::discovery::{local_hostname, resolve_target};
 use super::peers::{match_peer_key, node_state, record_peer, NodeState};
 use super::protocol::{
-    DISCOVERY_PORT, NODE_ACCEPT_PREFIX, NODE_CONNECT_PREFIX, NODE_REJECT_PREFIX, PeerStatus,
+    PeerStatus, DISCOVERY_PORT, NODE_ACCEPT_PREFIX, NODE_CONNECT_PREFIX, NODE_REJECT_PREFIX,
 };
 
 fn parse_bool(value: &str) -> Option<bool> {

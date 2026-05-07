@@ -1,7 +1,9 @@
+use arcadia_core::config::modules::REMOTE_SESSION_MODULE_NAME;
+use arcadia_core::modules::lan::connected_approved_session_peers;
 use arcadia_core::navigation;
 use gpui::{
-    div, img, px, rgb, Context, Div, InteractiveElement, ParentElement,
-    StatefulInteractiveElement, Styled, Window,
+    div, img, px, rgb, Context, Div, InteractiveElement, ParentElement, StatefulInteractiveElement,
+    Styled, Window,
 };
 
 use crate::gui::app::{window_controls_top_padding, ArcadiaRoot};
@@ -56,6 +58,7 @@ impl ArcadiaRoot {
                             .on_mouse_down(
                                 gpui::MouseButton::Right,
                                 cx.listener(|this, _, _, cx| {
+                                    this.session_route_menu_open = false;
                                     this.app_menu_open = true;
                                     cx.notify();
                                 }),
@@ -72,26 +75,161 @@ impl ArcadiaRoot {
                                     })
                                     .child("Arcadia"),
                             )
-                            .child(
-                                div()
-                                    .ml_2()
-                                    .px_2()
-                                    .py_0p5()
-                                    .rounded_full()
-                                    .border_1()
-                                    .border_color(theme::sidebar_session_chip_border(is_dark))
-                                    .bg(theme::sidebar_session_chip_bg(is_dark))
-                                    .hover(move |style| {
-                                        style.bg(theme::sidebar_session_chip_hover_bg(is_dark))
-                                    })
-                                    .child(
-                                        div()
-                                            .text_xs()
-                                            .font_weight(gpui::FontWeight::MEDIUM)
-                                            .text_color(theme::sidebar_session_chip_text(is_dark))
-                                            .child("local"),
-                                    ),
-                            ),
+                            .child({
+                                let session_label = self
+                                    .remote_route
+                                    .as_deref()
+                                    .and_then(|r| r.strip_prefix("lan:"))
+                                    .unwrap_or("local")
+                                    .to_string();
+                                if !self.is_module_enabled(REMOTE_SESSION_MODULE_NAME) {
+                                    div()
+                                        .ml_2()
+                                        .px_2()
+                                        .py_0p5()
+                                        .rounded_full()
+                                        .border_1()
+                                        .border_color(theme::sidebar_session_chip_border(is_dark))
+                                        .bg(theme::sidebar_session_chip_bg(is_dark))
+                                        .child(
+                                            div()
+                                                .text_xs()
+                                                .font_weight(gpui::FontWeight::MEDIUM)
+                                                .text_color(theme::sidebar_session_chip_text(is_dark))
+                                                .child("local"),
+                                        )
+                                } else {
+                                    let peers = connected_approved_session_peers();
+                                    div()
+                                        .relative()
+                                        .ml_2()
+                                        .child(
+                                            div()
+                                                .px_2()
+                                                .py_0p5()
+                                                .rounded_full()
+                                                .border_1()
+                                                .border_color(theme::sidebar_session_chip_border(
+                                                    is_dark,
+                                                ))
+                                                .bg(theme::sidebar_session_chip_bg(is_dark))
+                                                .hover(move |style| {
+                                                    style.bg(theme::sidebar_session_chip_hover_bg(
+                                                        is_dark,
+                                                    ))
+                                                })
+                                                .cursor_pointer()
+                                                .child(
+                                                    div()
+                                                        .text_xs()
+                                                        .font_weight(gpui::FontWeight::MEDIUM)
+                                                        .text_color(
+                                                            theme::sidebar_session_chip_text(is_dark),
+                                                        )
+                                                        .child(session_label),
+                                                )
+                                                .on_mouse_down(
+                                                    gpui::MouseButton::Left,
+                                                    cx.listener(|this, _, _, cx| {
+                                                        this.session_route_menu_open =
+                                                            !this.session_route_menu_open;
+                                                        this.app_menu_open = false;
+                                                        cx.notify();
+                                                    }),
+                                                ),
+                                        )
+                                        .child(if self.session_route_menu_open {
+                                            div()
+                                                .absolute()
+                                                .top(px(30.))
+                                                .left(px(0.))
+                                                .min_w(px(200.))
+                                                .p_1()
+                                                .rounded_md()
+                                                .border_1()
+                                                .border_color(if is_dark {
+                                                    rgb(0x374151)
+                                                } else {
+                                                    rgb(0xd1d5db)
+                                                })
+                                                .bg(if is_dark {
+                                                    rgb(0x111827)
+                                                } else {
+                                                    rgb(0xffffff)
+                                                })
+                                                .child(
+                                                    div()
+                                                        .w_full()
+                                                        .px_2()
+                                                        .py_1()
+                                                        .rounded_md()
+                                                        .cursor_pointer()
+                                                        .text_sm()
+                                                        .text_color(if is_dark {
+                                                            rgb(0xe5e7eb)
+                                                        } else {
+                                                            rgb(0x1f2937)
+                                                        })
+                                                        .hover(move |style| {
+                                                            style.bg(if is_dark {
+                                                                rgb(0x1f2937)
+                                                            } else {
+                                                                rgb(0xf3f4f6)
+                                                            })
+                                                        })
+                                                        .child("Local")
+                                                        .on_mouse_down(
+                                                            gpui::MouseButton::Left,
+                                                            cx.listener(|this, _, _, cx| {
+                                                                this.remote_route = None;
+                                                                this.session_route_menu_open = false;
+                                                                this.reload_modules();
+                                                                cx.notify();
+                                                            }),
+                                                        ),
+                                                )
+                                                .children(peers.into_iter().map(
+                                                    |(ip, hostname)| {
+                                                        let route = format!("lan:{ip}");
+                                                        let label = format!("{hostname} ({ip})");
+                                                        div()
+                                                            .w_full()
+                                                            .px_2()
+                                                            .py_1()
+                                                            .rounded_md()
+                                                            .cursor_pointer()
+                                                            .text_sm()
+                                                            .text_color(if is_dark {
+                                                                rgb(0xe5e7eb)
+                                                            } else {
+                                                                rgb(0x1f2937)
+                                                            })
+                                                            .hover(move |style| {
+                                                                style.bg(if is_dark {
+                                                                    rgb(0x1f2937)
+                                                                } else {
+                                                                    rgb(0xf3f4f6)
+                                                                })
+                                                            })
+                                                            .child(label)
+                                                            .on_mouse_down(
+                                                                gpui::MouseButton::Left,
+                                                                cx.listener(move |this, _, _, cx| {
+                                                                    this.remote_route =
+                                                                        Some(route.clone());
+                                                                    this.session_route_menu_open =
+                                                                        false;
+                                                                    this.reload_modules();
+                                                                    cx.notify();
+                                                                }),
+                                                            )
+                                                    },
+                                                ))
+                                        } else {
+                                            div().hidden()
+                                        })
+                                }
+                            }),
                     )
                     .child(if self.app_menu_open {
                         div()

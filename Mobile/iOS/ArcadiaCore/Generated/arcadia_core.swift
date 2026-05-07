@@ -949,6 +949,78 @@ public func FfiConverterTypeModuleToggleResult_lower(_ value: ModuleToggleResult
     return FfiConverterTypeModuleToggleResult.lower(value)
 }
 
+
+public struct RemoteMirrorDrain {
+    public var lines: [String]
+    /**
+     * Host handled inbound NODE_EXEC — surfaces showing **local** state should resync from disk / LAN snapshot.
+     */
+    public var syncLocalSurface: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(lines: [String], 
+        /**
+         * Host handled inbound NODE_EXEC — surfaces showing **local** state should resync from disk / LAN snapshot.
+         */syncLocalSurface: Bool) {
+        self.lines = lines
+        self.syncLocalSurface = syncLocalSurface
+    }
+}
+
+
+
+extension RemoteMirrorDrain: Equatable, Hashable {
+    public static func ==(lhs: RemoteMirrorDrain, rhs: RemoteMirrorDrain) -> Bool {
+        if lhs.lines != rhs.lines {
+            return false
+        }
+        if lhs.syncLocalSurface != rhs.syncLocalSurface {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(lines)
+        hasher.combine(syncLocalSurface)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeRemoteMirrorDrain: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> RemoteMirrorDrain {
+        return
+            try RemoteMirrorDrain(
+                lines: FfiConverterSequenceString.read(from: &buf), 
+                syncLocalSurface: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: RemoteMirrorDrain, into buf: inout [UInt8]) {
+        FfiConverterSequenceString.write(value.lines, into: &buf)
+        FfiConverterBool.write(value.syncLocalSurface, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRemoteMirrorDrain_lift(_ buf: RustBuffer) throws -> RemoteMirrorDrain {
+    return try FfiConverterTypeRemoteMirrorDrain.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeRemoteMirrorDrain_lower(_ value: RemoteMirrorDrain) -> RustBuffer {
+    return FfiConverterTypeRemoteMirrorDrain.lower(value)
+}
+
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
@@ -1072,6 +1144,15 @@ fileprivate struct FfiConverterSequenceTypeModuleStatus: FfiConverterRustBuffer 
     }
 }
 /**
+ * Drain mirrored NODE_EXEC transcript lines + host UI sync flag (reload modules when showing local state).
+ */
+public func drainRemoteMirrorBatch() -> RemoteMirrorDrain {
+    return try!  FfiConverterTypeRemoteMirrorDrain.lift(try! rustCall() {
+    uniffi_arcadia_core_fn_func_drain_remote_mirror_batch($0
+    )
+})
+}
+/**
  * Execute a command by dot-separated token (e.g. "lan.scan").
  * Returns the result string; errors are embedded in the return value.
  */
@@ -1190,6 +1271,9 @@ private var initializationResult: InitializationResult = {
     let scaffolding_contract_version = ffi_arcadia_core_uniffi_contract_version()
     if bindings_contract_version != scaffolding_contract_version {
         return InitializationResult.contractVersionMismatch
+    }
+    if (uniffi_arcadia_core_checksum_func_drain_remote_mirror_batch() != 51970) {
+        return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_arcadia_core_checksum_func_execute_command() != 44678) {
         return InitializationResult.apiChecksumMismatch

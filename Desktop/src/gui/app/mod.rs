@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 mod entry;
+mod lan_nodes;
 mod lifecycle;
 mod modules_page;
 mod navigation;
@@ -96,6 +97,11 @@ pub struct ArcadiaRoot {
     pub splash_tick_started: bool,
     pub sidebar_visible: bool,
     pub app_menu_open: bool,
+    pub session_route_menu_open: bool,
+    /// When `Some("lan:<ip-or-alias>")`, module visibility and routed commands use this peer.
+    pub remote_route: Option<String>,
+    pub lan_discovered_peers: Vec<(String, String)>,
+    pub lan_command_feedback: String,
 }
 
 impl ArcadiaRoot {
@@ -105,5 +111,12 @@ impl ArcadiaRoot {
             .find(|(n, _)| n == name)
             .map(|(_, enabled)| *enabled)
             .unwrap_or(false)
+    }
+
+    pub(crate) fn execution_context(&self) -> arcadia_core::modules::ExecutionContext {
+        arcadia_core::modules::ExecutionContext {
+            net_as: self.remote_route.clone(),
+            net_timeout_ms: None,
+        }
     }
 }

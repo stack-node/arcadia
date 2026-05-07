@@ -3,6 +3,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use arcadia_core::config::modules::{ModulesConfig, SHELL_MODULE_NAME, SHELL_MOTD_MODULE_NAME};
+use arcadia_core::modules;
+use arcadia_core::modules::surface::snapshot_module_rows;
 use arcadia_core::config::ConfigFile;
 use arcadia_core::modules::shell_motd;
 use arcadia_core::navigation;
@@ -96,13 +98,28 @@ impl ArcadiaRoot {
             splash_tick_started: false,
             sidebar_visible: true,
             app_menu_open: false,
+            session_route_menu_open: false,
+            remote_route: None,
+            lan_discovered_peers: Vec::new(),
+            lan_command_feedback: String::new(),
         }
     }
 
     pub fn reload_modules(&mut self) {
-        self.module_rows = ModulesConfig::load_or_create()
-            .map(|cfg| cfg.modules.into_iter().collect())
-            .unwrap_or_default();
+        self.module_rows = if let Some(ref route) = self.remote_route {
+            let ctx = modules::ExecutionContext {
+                net_as: Some(route.clone()),
+                net_timeout_ms: None,
+            };
+            match modules::execute_command("surface.snapshot", &[], &ctx) {
+                Ok(Some(json)) => snapshot_module_rows(&json),
+                _ => Vec::new(),
+            }
+        } else {
+            ModulesConfig::load_or_create()
+                .map(|cfg| cfg.modules.into_iter().collect())
+                .unwrap_or_default()
+        };
         self.ensure_valid_navigation_selection();
     }
 

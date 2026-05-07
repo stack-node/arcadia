@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 
@@ -22,6 +23,8 @@ struct ContentView: View {
     @State var shellHistory: [String] = ["Arcadia Terminal ready."]
     @State var moduleToggleTask: Task<Void, Never>?
     @State var moduleErrorMessage: String?
+    @State var remoteRoute: String?
+    @State var remoteTargets: [RemoteTarget] = []
 
     init() {
         let loadedRegistry = Self.loadNavigationRegistry()
@@ -57,6 +60,9 @@ struct ContentView: View {
                 sidebarSwipeThreshold: sidebarSwipeThreshold,
                 isPageVisible: { pageID in self.isPageVisible(pageID) },
                 remoteSessionEnabled: isModuleEnabled(ModuleNames.remoteSession),
+                remoteRoute: $remoteRoute,
+                remoteTargets: remoteTargets,
+                refreshRemoteTargets: refreshRemoteTargets,
                 activeGroupID: $activeGroupID,
                 activePageID: $activePageID
             )
@@ -81,6 +87,13 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            refreshRemoteTargets()
+            reloadModules()
+        }
+        .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
+            applyRemoteMirrorSideEffects()
+        }
+        .onChange(of: remoteRoute) { _, _ in
             reloadModules()
         }
         .onChange(of: isSidebarOpen) { open in

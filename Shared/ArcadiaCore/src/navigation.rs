@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use crate::config::modules::{NET_MODULE_NAME, SHELL_MODULE_NAME};
+use crate::config::modules::{LAN_MODULE_NAME, NET_MODULE_NAME, SHELL_MODULE_NAME};
 
 #[derive(Clone, Copy, Serialize)]
 pub struct NavigationPageDefinition {
@@ -90,6 +90,15 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         accent: "teal",
         required_module: Some(NET_MODULE_NAME),
     },
+    NavigationPageDefinition {
+        id: "network.nodes",
+        title: "Nodes",
+        description: "Discover LAN peers and manage pairing with lan.scan / lan.node.",
+        glyph: "nodes",
+        system_image: "rectangle.connected.to.line.under.fill",
+        accent: "cyan",
+        required_module: Some(LAN_MODULE_NAME),
+    },
 ];
 
 pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
@@ -106,16 +115,12 @@ pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
         label: "Network",
         glyph: "logs",
         system_image: "network",
-        pages: &["network.overview"],
+        pages: &["network.overview", "network.nodes"],
         accent: "cyan",
     },
 ];
 
-pub const GLOBAL_PAGE_IDS: &[&str] = &[
-    "global.dashboard",
-    "global.settings",
-    "global.modules",
-];
+pub const GLOBAL_PAGE_IDS: &[&str] = &["global.dashboard", "global.settings", "global.modules"];
 pub const DEFAULT_GROUP_ID: &str = "utilities";
 pub const DEFAULT_PAGE_ID: &str = "global.dashboard";
 

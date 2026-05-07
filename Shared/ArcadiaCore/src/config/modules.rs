@@ -6,6 +6,7 @@ use crate::config::ConfigFile;
 const LEGACY_LAN_MODULE_NAME: &str = "lan-module";
 pub const LAN_MODULE_NAME: &str = "lan";
 pub const NET_MODULE_NAME: &str = "net";
+pub const SURFACE_MODULE_NAME: &str = "surface";
 pub const REMOTE_SESSION_MODULE_NAME: &str = "remote-session";
 pub const SHELL_MODULE_NAME: &str = "shell";
 pub const SHELL_MOTD_MODULE_NAME: &str = "shell-motd";
@@ -34,10 +35,16 @@ static MODULE_REGISTRY: &[ModuleManifest] = &[
         required_modules: &[],
     },
     ModuleManifest {
+        name: SURFACE_MODULE_NAME,
+        version: "0.1.0",
+        description: "Generic UI snapshot (surface.snapshot) and patches (surface.patch); extend patches for new surfaces.",
+        required_modules: &[],
+    },
+    ModuleManifest {
         name: REMOTE_SESSION_MODULE_NAME,
         version: "0.1.0",
-        description: "Placeholder for upcoming remote interactive session support.",
-        required_modules: &[NET_MODULE_NAME],
+        description: "Permission to route execute_command over LAN (net_as: lan:…); transcript/mirror are automatic on hosts.",
+        required_modules: &[NET_MODULE_NAME, LAN_MODULE_NAME],
     },
     ModuleManifest {
         name: SHELL_MODULE_NAME,
@@ -67,14 +74,19 @@ fn required_modules(module_name: &str) -> &'static [&'static str] {
 }
 
 fn is_known_module(module_name: &str) -> bool {
-    MODULE_REGISTRY.iter().any(|manifest| manifest.name == module_name)
+    MODULE_REGISTRY
+        .iter()
+        .any(|manifest| manifest.name == module_name)
 }
 
 impl Default for ModulesConfig {
     fn default() -> Self {
         let modules = MODULE_REGISTRY
             .iter()
-            .map(|manifest| (manifest.name.to_string(), false))
+            .map(|manifest| {
+                let enabled = manifest.name == SURFACE_MODULE_NAME;
+                (manifest.name.to_string(), enabled)
+            })
             .collect();
         Self { modules }
     }

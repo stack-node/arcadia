@@ -202,9 +202,8 @@ fn arch_art_lines() -> Vec<String> {
             let cf = ic as f32;
 
             let dist_top = ((cf - cx_f).powi(2) + ((r as f32) - 0.8).powi(2)).sqrt();
-            let on_lintel = cap_row
-                && dist_top <= lintel_half + 1.8 * gs
-                && dist_top >= lintel_half - 2.6 * gs;
+            let on_lintel =
+                cap_row && dist_top <= lintel_half + 1.8 * gs && dist_top >= lintel_half - 2.6 * gs;
 
             let in_open = c >= lp1 && c < rp0;
             let left_pillar = c >= lp0 && c < lp1;
@@ -272,14 +271,7 @@ fn arch_art_lines() -> Vec<String> {
             } else {
                 let outer = outer_left || outer_right;
                 let bg = sky_at(
-                    outer,
-                    t,
-                    sky_out_t,
-                    sky_out_m,
-                    sky_out_b,
-                    sky_in_t,
-                    sky_in_m,
-                    sky_in_b,
+                    outer, t, sky_out_t, sky_out_m, sky_out_b, sky_in_t, sky_in_m, sky_in_b,
                 );
                 let star = stars.iter().find(|s| s.0 == r && s.1 == ic);
                 if let Some(&(_, _, ch)) = star {
@@ -426,7 +418,11 @@ fn os_pretty() -> String {
     {
         let name = run_cmd("sw_vers", &["-productName"]).unwrap_or_else(|| "macOS".into());
         let ver = run_cmd("sw_vers", &["-productVersion"]).unwrap_or_default();
-        if ver.is_empty() { name } else { format!("{name} {ver}") }
+        if ver.is_empty() {
+            name
+        } else {
+            format!("{name} {ver}")
+        }
     }
     #[cfg(target_os = "windows")]
     {
@@ -443,7 +439,11 @@ fn kernel_line() -> String {
     {
         let sys = run_cmd("uname", &["-s"]).unwrap_or_else(|| "Unix".into());
         let rel = run_cmd("uname", &["-r"]).unwrap_or_default();
-        return if rel.is_empty() { sys } else { format!("{sys} {rel}") };
+        return if rel.is_empty() {
+            sys
+        } else {
+            format!("{sys} {rel}")
+        };
     }
     #[cfg(target_os = "windows")]
     {
@@ -485,7 +485,10 @@ fn cpu_model() -> String {
     {
         if let Ok(cpuinfo) = std::fs::read_to_string("/proc/cpuinfo") {
             for line in cpuinfo.lines() {
-                if let Some(m) = line.strip_prefix("model name\t: ").or_else(|| line.strip_prefix("model name : ")) {
+                if let Some(m) = line
+                    .strip_prefix("model name\t: ")
+                    .or_else(|| line.strip_prefix("model name : "))
+                {
                     return m.trim().to_string();
                 }
             }
@@ -517,7 +520,11 @@ fn memory_line() -> String {
             let mut avail_kb = None::<u64>;
             for line in txt.lines() {
                 if let Some(n) = line.strip_prefix("MemTotal:") {
-                    total_kb = n.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                    total_kb = n
+                        .split_whitespace()
+                        .next()
+                        .and_then(|s| s.parse().ok())
+                        .unwrap_or(0);
                 }
                 if let Some(n) = line.strip_prefix("MemAvailable:") {
                     avail_kb = n.split_whitespace().next().and_then(|s| s.parse().ok());

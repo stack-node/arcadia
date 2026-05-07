@@ -7,6 +7,7 @@ pub fn icon_path(glyph_key: &'static str) -> &'static str {
         "logs" => "icons/logs.svg",
         "settings" => "icons/settings.svg",
         "modules" => "icons/modules.svg",
+        "nodes" => "icons/nodes.svg",
         "tools" => "icons/tools.svg",
         _ => "icons/terminal.svg",
     }

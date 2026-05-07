@@ -13,6 +13,7 @@ impl Render for ArcadiaRoot {
             self.ensure_splash_tick(window, cx);
             return self.render_splash();
         }
+        self.sync_peer_remote_exec_side_effects(window, cx);
         self.ensure_shell_caret_task(window, cx);
         if self.tui_session.is_some() {
             self.sync_tui_size(window);
@@ -47,6 +48,10 @@ impl Render for ArcadiaRoot {
                 cx.listener(|this, _, _, cx| {
                     if this.app_menu_open {
                         this.app_menu_open = false;
+                        cx.notify();
+                    }
+                    if this.session_route_menu_open {
+                        this.session_route_menu_open = false;
                         cx.notify();
                     }
                 }),

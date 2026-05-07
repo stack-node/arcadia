@@ -302,6 +302,12 @@ RustBuffer uniffi_arcadia_core_fn_method_modulemanager_set_enabled(void*_Nonnull
 RustBuffer uniffi_arcadia_core_fn_method_modulemanager_set_enabled_with_requirements(void*_Nonnull ptr, RustBuffer name, int8_t enabled, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_DRAIN_REMOTE_MIRROR_BATCH
+#define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_DRAIN_REMOTE_MIRROR_BATCH
+RustBuffer uniffi_arcadia_core_fn_func_drain_remote_mirror_batch(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_EXECUTE_COMMAND
 #define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_EXECUTE_COMMAND
 RustBuffer uniffi_arcadia_core_fn_func_execute_command(RustBuffer token, RustBuffer args, RustBuffer context, RustCallStatus *_Nonnull out_status
@@ -641,6 +647,12 @@ void ffi_arcadia_core_rust_future_free_void(uint64_t handle
 #ifndef UNIFFI_FFIDEF_FFI_ARCADIA_CORE_RUST_FUTURE_COMPLETE_VOID
 #define UNIFFI_FFIDEF_FFI_ARCADIA_CORE_RUST_FUTURE_COMPLETE_VOID
 void ffi_arcadia_core_rust_future_complete_void(uint64_t handle, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_DRAIN_REMOTE_MIRROR_BATCH
+#define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_DRAIN_REMOTE_MIRROR_BATCH
+uint16_t uniffi_arcadia_core_checksum_func_drain_remote_mirror_batch(void
+    
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_EXECUTE_COMMAND

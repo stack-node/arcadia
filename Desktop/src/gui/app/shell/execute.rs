@@ -3,10 +3,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use arcadia_core::modules;
-use gpui::{
-    Context,
-    Timer, Window, WindowAppearance,
-};
+use gpui::{Context, Timer, Window, WindowAppearance};
 
 use super::super::super::tui::TuiSession;
 use super::super::{window_controls_top_padding, ArcadiaRoot, ShellMode};
@@ -47,45 +44,20 @@ fn compute_tui_size(window: &Window, sidebar_visible: bool) -> (u16, u16) {
 }
 
 impl ArcadiaRoot {
-    pub fn sync_tui_size(&mut self, window: &Window) {
-        let (rows, cols) = compute_tui_size(window, self.sidebar_visible);
-        if cols != self.tui_cols || rows != self.tui_rows {
-            self.tui_cols = cols;
-            self.tui_rows = rows;
-            if let Some(session) = &self.tui_session {
-                session.resize(rows, cols);
-            }
-        }
-    }
-
-    pub fn run_shell_execute(
+    fn stream_shell_command_output(
         &mut self,
-        command: &str,
         window: &mut Window,
         cx: &mut Context<Self>,
+        history_command_display: &str,
+        token: &str,
+        args: &[&str],
+        exec_ctx: &modules::ExecutionContext,
     ) {
-        let normalized = command.trim();
-        if normalized.eq_ignore_ascii_case("clear") || normalized.eq_ignore_ascii_case("cls") {
-            self.shell_stream_nonce = self.shell_stream_nonce.wrapping_add(1);
-            self.shell_history.clear();
-            self.shell_output_scroll.scroll_to_bottom();
-            cx.notify();
-            return;
-        }
-        if self.shell_mode == ShellMode::Generic {
-            self.spawn_tui_command(normalized, window, cx);
-            return;
-        }
-        let args = vec![command];
-        let result = modules::execute_command(
-            self.shell_mode.command_token(),
-            &args,
-            &modules::ExecutionContext::default(),
-        );
+        let result = modules::execute_command(token, args, exec_ctx);
         self.shell_stream_nonce = self.shell_stream_nonce.wrapping_add(1);
         let stream_nonce = self.shell_stream_nonce;
         self.shell_history.push(format!(
-            "{}{command}",
+            "{}{history_command_display}",
             shell_history_prompt_prefix(window)
         ));
         self.shell_output_scroll.scroll_to_bottom();
@@ -95,7 +67,6 @@ impl ArcadiaRoot {
             Err(err) => err,
         };
         self.shell_output_scroll.scroll_to_bottom();
-        // Stream output line-by-line via async task to keep UI responsive
         let lines: Vec<String> = output.lines().map(str::to_string).collect();
         cx.spawn_in(
             window,
@@ -129,6 +100,57 @@ impl ArcadiaRoot {
         .detach();
     }
 
+    pub fn sync_tui_size(&mut self, window: &Window) {
+        let (rows, cols) = compute_tui_size(window, self.sidebar_visible);
+        if cols != self.tui_cols || rows != self.tui_rows {
+            self.tui_cols = cols;
+            self.tui_rows = rows;
+            if let Some(session) = &self.tui_session {
+                session.resize(rows, cols);
+            }
+        }
+    }
+
+    pub fn run_shell_execute(
+        &mut self,
+        command: &str,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let normalized = command.trim();
+        if normalized.eq_ignore_ascii_case("clear") || normalized.eq_ignore_ascii_case("cls") {
+            self.shell_stream_nonce = self.shell_stream_nonce.wrapping_add(1);
+            self.shell_history.clear();
+            self.shell_output_scroll.scroll_to_bottom();
+            cx.notify();
+            return;
+        }
+        let ctx = self.execution_context();
+        if self.shell_mode == ShellMode::Generic {
+            if self.remote_route.is_some() {
+                self.stream_shell_command_output(
+                    window,
+                    cx,
+                    normalized,
+                    "shell.execute",
+                    &[normalized],
+                    &ctx,
+                );
+                return;
+            }
+            self.spawn_tui_command(normalized, window, cx);
+            return;
+        }
+        self.stream_shell_command_output(
+            window,
+            cx,
+            command,
+            self.shell_mode.command_token(),
+            &[command],
+            &ctx,
+        );
+    }
+
     fn spawn_tui_command(&mut self, command: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.tui_session = None;
         self.tui_ready = false;
@@ -139,10 +161,8 @@ impl ArcadiaRoot {
         self.tui_rows = rows;
         self.tui_cols = cols;
 
-        self.shell_history.push(format!(
-            "{}{command}",
-            shell_history_prompt_prefix(window)
-        ));
+        self.shell_history
+            .push(format!("{}{command}", shell_history_prompt_prefix(window)));
         self.shell_output_scroll.scroll_to_bottom();
 
         let cwd_at_spawn = self.shell_working_dir.clone();
@@ -233,7 +253,7 @@ impl ArcadiaRoot {
                                 }
 
                                 if is_done && chunks.is_empty() {
-                                            let screen_lines: Vec<String> = parser
+                                    let screen_lines: Vec<String> = parser
                                         .lock()
                                         .map(|p| {
                                             let screen = p.screen();
@@ -256,10 +276,11 @@ impl ArcadiaRoot {
                                                 if let Some(ref sess) = this.tui_session {
                                                     let from_fg =
                                                         sess.foreground_cwd().map(PathBuf::from);
-                                                    let from_cd = crate::gui::tui::resolve_simple_cd(
-                                                        &cwd_at_spawn,
-                                                        &command_owned,
-                                                    );
+                                                    let from_cd =
+                                                        crate::gui::tui::resolve_simple_cd(
+                                                            &cwd_at_spawn,
+                                                            &command_owned,
+                                                        );
                                                     if let Some(p) = from_fg.or(from_cd) {
                                                         this.shell_working_dir = p.clone();
                                                         this.shell_display_cwd =

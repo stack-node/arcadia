@@ -6,18 +6,18 @@ use std::sync::{Mutex, OnceLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use crate::config::modules::{LAN_MODULE_NAME, ModulesConfig};
+use crate::config::modules::{ModulesConfig, LAN_MODULE_NAME};
 use crate::config::ConfigFile;
 use crate::modules::ExecutionContext;
 
 use super::config::{is_auto_allowed, is_identifier_approved, load_node_config};
 use super::peers::{node_state, record_peer};
+use super::protocol::PeerStatus;
 use super::protocol::{
     DISCOVERY_PORT, DISCOVERY_REQUEST, DISCOVERY_RESPONSE_PREFIX, NODE_ACCEPT_PREFIX,
     NODE_CONNECT_PREFIX, NODE_EXEC_PREFIX, NODE_EXEC_RESULT_PREFIX, NODE_REJECT_PREFIX,
     RECV_BUF_SMALL, SCAN_WAIT_MS,
 };
-use super::protocol::PeerStatus;
 
 pub static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVICE_THREAD: OnceLock<Mutex<Option<JoinHandle<()>>>> = OnceLock::new();
@@ -89,36 +89,15 @@ pub fn parse_targets(range: Option<&str>) -> Result<Vec<SocketAddrV4>, String> {
     }
 }
 
-pub fn scan(args: &[&str], _context: &ExecutionContext) -> String {
-    let mut range: Option<&str> = None;
-    let mut i = 0;
-    while i < args.len() {
-        match args[i] {
-            "--range" => {
-                let Some(value) = args.get(i + 1) else {
-                    return "Usage: lan.scan [--range <CIDR-or-ip>]".to_string();
-                };
-                range = Some(*value);
-                i += 2;
-            }
-            unknown => {
-                return format!(
-                    "Unknown argument: {unknown}. Usage: lan.scan [--range <CIDR-or-ip>]"
-                );
-            }
-        }
-    }
-
-    let Ok(targets) = parse_targets(range) else {
-        return "Invalid range. Use --range <CIDR> (e.g. 192.168.1.0/24) or --range <IP>"
-            .to_string();
-    };
+/// UDP discovery only (same semantics as `lan.scan`); returns sorted `(ip, hostname)` pairs.
+pub fn discover_lan_peers(range: Option<&str>) -> Result<Vec<(String, String)>, String> {
+    let targets = parse_targets(range)?;
 
     let Ok(socket) = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)) else {
-        return "Failed to bind UDP socket for lan.scan".to_string();
+        return Err("Failed to bind UDP socket for lan.scan".to_string());
     };
     if socket.set_broadcast(true).is_err() {
-        return "Failed to enable UDP broadcast for lan.scan".to_string();
+        return Err("Failed to enable UDP broadcast for lan.scan".to_string());
     }
     let _ = socket.set_read_timeout(Some(Duration::from_millis(100)));
 
@@ -147,15 +126,42 @@ pub fn scan(args: &[&str], _context: &ExecutionContext) -> String {
         }
     }
 
-    if peers.is_empty() {
-        return "No Arcadia peers found with LAN module enabled".to_string();
+    Ok(peers.into_iter().collect())
+}
+
+pub fn scan(args: &[&str], _context: &ExecutionContext) -> String {
+    let mut range: Option<&str> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i] {
+            "--range" => {
+                let Some(value) = args.get(i + 1) else {
+                    return "Usage: lan.scan [--range <CIDR-or-ip>]".to_string();
+                };
+                range = Some(*value);
+                i += 2;
+            }
+            unknown => {
+                return format!(
+                    "Unknown argument: {unknown}. Usage: lan.scan [--range <CIDR-or-ip>]"
+                );
+            }
+        }
     }
 
-    let mut lines = vec!["Arcadia LAN peers:".to_string()];
-    for (ip, hostname) in peers {
-        lines.push(format!("- {ip} ({hostname})"));
+    match discover_lan_peers(range) {
+        Ok(peers) if peers.is_empty() => {
+            "No Arcadia peers found with LAN module enabled".to_string()
+        }
+        Ok(peers) => {
+            let mut lines = vec!["Arcadia LAN peers:".to_string()];
+            for (ip, hostname) in peers {
+                lines.push(format!("- {ip} ({hostname})"));
+            }
+            lines.join("\n")
+        }
+        Err(msg) => msg,
     }
-    lines.join("\n")
 }
 
 pub fn start_service() {
@@ -172,8 +178,7 @@ pub fn start_service() {
     };
 
     let handle = thread::spawn(|| {
-        let Ok(socket) =
-            UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DISCOVERY_PORT))
+        let Ok(socket) = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DISCOVERY_PORT))
         else {
             SERVICE_RUNNING.store(false, Ordering::SeqCst);
             return;
@@ -260,6 +265,12 @@ pub fn start_service() {
                     Ok(None) => format!("Unknown remote command: {token}"),
                     Err(err) => err,
                 };
+                crate::modules::remote_mirror::enqueue_remote_exec_mirror(
+                    token.to_string(),
+                    owned_args.clone(),
+                    result.clone(),
+                );
+                crate::modules::remote_mirror::request_host_ui_sync_after_peer_exec();
                 let response = format!("{NODE_EXEC_RESULT_PREFIX}\t{result}");
                 let _ = socket.send_to(response.as_bytes(), src);
             }

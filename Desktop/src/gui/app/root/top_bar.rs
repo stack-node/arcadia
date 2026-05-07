@@ -1,8 +1,5 @@
 use arcadia_core::navigation;
-use gpui::{
-    div, rgb, Context, InteractiveElement, IntoElement, ParentElement,
-    Styled,
-};
+use gpui::{div, rgb, Context, InteractiveElement, IntoElement, ParentElement, Styled};
 
 use crate::gui::app::{ArcadiaRoot, ShellMode};
 use crate::gui::theme;

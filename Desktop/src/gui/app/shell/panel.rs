@@ -82,12 +82,14 @@ impl ArcadiaRoot {
                     .id("arcadia-shell-output")
                     .overflow_y_scroll()
                     .track_scroll(&self.shell_output_scroll)
-                    .child(div().w_full().p_3().flex().flex_col().gap_0().children(
-                        self.shell_history
-                            .iter()
-                            .filter(|line| !line.is_empty())
-                            .map(|line| shell_history_line(line, is_dark)),
-                    )),
+                    .child(
+                        div().w_full().p_3().flex().flex_col().gap_0().children(
+                            self.shell_history
+                                .iter()
+                                .filter(|line| !line.is_empty())
+                                .map(|line| shell_history_line(line, is_dark)),
+                        ),
+                    ),
             )
             .child(
                 div()

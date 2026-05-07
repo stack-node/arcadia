@@ -107,6 +107,8 @@ if [[ ! -f "\${SHARED_BUILD_SCRIPT}" ]]; then
   exit 1
 fi
 
+cd "\${PROJECT_ROOT}" || exit 1
+
 if ! command -v rg >/dev/null 2>&1; then
   echo "Error: rg (ripgrep) not found. Install via 'brew install ripgrep' and retry."
   exit 1
@@ -148,7 +150,6 @@ fi
 echo "Building shared iOS artifacts..."
 bash "\${SHARED_BUILD_SCRIPT}"
 
-cd "\${PROJECT_ROOT}"
 xcodebuild \
   -project "\${PROJECT_PATH}" \
   -scheme "ArcadiaApp" \

@@ -9,6 +9,9 @@ struct SidebarView: View {
     let sidebarSwipeThreshold: CGFloat
     let isPageVisible: (String) -> Bool
     let remoteSessionEnabled: Bool
+    @Binding var remoteRoute: String?
+    let remoteTargets: [RemoteTarget]
+    let refreshRemoteTargets: () -> Void
 
     @Binding var activeGroupID: String
     @Binding var activePageID: String
@@ -31,6 +34,12 @@ struct SidebarView: View {
             .compactMap { id in registry.pages.first(where: { $0.id == id }) }
     }
 
+    private var sessionChipTitle: String {
+        guard let route = remoteRoute, route.hasPrefix("lan:") else { return "Local" }
+        let ip = String(route.dropFirst(4))
+        return remoteTargets.first(where: { $0.ip == ip })?.hostname ?? ip
+    }
+
     private func selectGroup(_ groupID: String) {
         activeGroupID = groupID
         if let group = visibleGroups.first(where: { $0.id == groupID }),
@@ -49,10 +58,19 @@ struct SidebarView: View {
 
                     if remoteSessionEnabled {
                         Menu {
-                            Button("local") {}
+                            Button("Local") {
+                                remoteRoute = nil
+                                refreshRemoteTargets()
+                            }
+                            ForEach(remoteTargets) { target in
+                                Button("\(target.hostname) (\(target.ip))") {
+                                    remoteRoute = "lan:\(target.ip)"
+                                    refreshRemoteTargets()
+                                }
+                            }
                         } label: {
                             HStack(spacing: 4) {
-                                Text("local")
+                                Text(sessionChipTitle)
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 7, weight: .bold))
                             }
@@ -66,6 +84,7 @@ struct SidebarView: View {
                                     .stroke(theme.cardStrokeColor, lineWidth: 1)
                             }
                         }
+                        .onAppear { refreshRemoteTargets() }
                     }
                 }
 

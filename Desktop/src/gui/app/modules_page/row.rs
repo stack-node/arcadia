@@ -1,9 +1,8 @@
 use arcadia_core::config::modules::{ModuleManifest, ModulesConfig};
+use arcadia_core::modules;
 use arcadia_core::config::ConfigFile;
 use gpui::{div, rgb};
-use gpui::{
-    Context, InteractiveElement, IntoElement, ParentElement, Styled,
-};
+use gpui::{Context, InteractiveElement, IntoElement, ParentElement, Styled};
 
 use crate::cli;
 use crate::gui::app::ArcadiaRoot;
@@ -149,6 +148,26 @@ impl ArcadiaRoot {
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(move |this, _, _, cx| {
+                            if this.remote_route.is_some() {
+                                let enabled_next = !enabled;
+                                let ctx = this.execution_context();
+                                let name = module_name.clone();
+                                let payload =
+                                    arcadia_core::modules::surface::patch_json_modules_set(
+                                        &name,
+                                        enabled_next,
+                                    );
+                                match modules::execute_command("surface.patch", &[payload.as_str()], &ctx)
+                                {
+                                    Err(err) => eprintln!("{err}"),
+                                    Ok(Some(msg)) => eprintln!("{msg}"),
+                                    Ok(None) => {}
+                                }
+                                this.pending_module_enable = None;
+                                this.reload_modules();
+                                cx.notify();
+                                return;
+                            }
                             if enabled {
                                 let _ = cli::handle(&format!("module {module_name} disable"));
                                 this.pending_module_enable = None;

@@ -126,13 +126,7 @@ impl ArcadiaRoot {
                     .id("arcadia-tui-scroll")
                     .overflow_y_scroll()
                     .track_scroll(&self.tui_scroll)
-                    .child(
-                        div()
-                            .w_full()
-                            .flex()
-                            .flex_col()
-                            .children(row_els),
-                    ),
+                    .child(div().w_full().flex().flex_col().children(row_els)),
             )
     }
 }

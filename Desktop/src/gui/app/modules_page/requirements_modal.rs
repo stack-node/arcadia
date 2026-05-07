@@ -1,7 +1,5 @@
 use gpui::{div, rgb};
-use gpui::{
-    Context, InteractiveElement, IntoElement, ParentElement, Styled,
-};
+use gpui::{Context, InteractiveElement, IntoElement, ParentElement, Styled};
 
 use crate::cli;
 use crate::gui::app::ArcadiaRoot;

@@ -40,10 +40,7 @@ pub fn cwd_for_pid(pid: u32) -> Option<String> {
     }
     let path = &vnodepathinfo.pvi_cdir.vip_path;
     let flat = unsafe {
-        std::slice::from_raw_parts(
-            path.as_ptr() as *const u8,
-            std::mem::size_of_val(path),
-        )
+        std::slice::from_raw_parts(path.as_ptr() as *const u8, std::mem::size_of_val(path))
     };
     let end = flat.iter().position(|&b| b == 0).unwrap_or(flat.len());
     std::str::from_utf8(&flat[..end])

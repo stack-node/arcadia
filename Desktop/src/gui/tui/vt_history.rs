@@ -75,18 +75,8 @@ pub(crate) fn vt100_row_for_shell_history(
     for col in 0..cols {
         let cell = screen.cell(row, col);
         let (nf, nb, nbold, text) = match cell {
-            Some(cell) => (
-                cell.fgcolor(),
-                cell.bgcolor(),
-                cell.bold(),
-                cell.contents(),
-            ),
-            None => (
-                Color::Default,
-                Color::Default,
-                false,
-                " ".to_string(),
-            ),
+            Some(cell) => (cell.fgcolor(), cell.bgcolor(), cell.bold(), cell.contents()),
+            None => (Color::Default, Color::Default, false, " ".to_string()),
         };
         let key = (nf, nb, nbold);
         if prev.as_ref() != Some(&key) {

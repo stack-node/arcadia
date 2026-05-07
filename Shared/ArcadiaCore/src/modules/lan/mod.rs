@@ -9,18 +9,78 @@ mod protocol;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use std::time::Duration;
 
+use serde::Serialize;
+
 use crate::modules::ModuleCommand;
 
 use config::{is_identifier_approved, load_node_config, resolve_alias_target};
 use discovery::resolve_target;
 use peers::node_state;
+use protocol::PeerStatus;
 use protocol::{
     DEFAULT_REMOTE_TIMEOUT_MS, DISCOVERY_PORT, NODE_EXEC_PREFIX, NODE_EXEC_RESULT_PREFIX,
     RECV_BUF_LARGE,
 };
-use protocol::PeerStatus;
 
-pub use discovery::{start_service, stop_service};
+pub use discovery::{discover_lan_peers, start_service, stop_service};
+
+/// Row for LAN Nodes UI (desktop / callers); mirrors in-memory peer records.
+#[derive(Clone, Debug)]
+pub struct LanKnownPeer {
+    pub ip: String,
+    pub hostname: String,
+    pub status: &'static str,
+}
+
+pub fn list_known_lan_peers() -> Vec<LanKnownPeer> {
+    let Ok(guard) = peers::node_state().lock() else {
+        return Vec::new();
+    };
+    guard
+        .peers
+        .values()
+        .map(|p| LanKnownPeer {
+            ip: p.ip.clone(),
+            hostname: p.hostname.clone(),
+            status: p.status.as_str(),
+        })
+        .collect()
+}
+
+/// Connected peers approved in local node config (`lan_nodes.toml`), sorted by IP.
+pub fn connected_approved_session_peers() -> Vec<(String, String)> {
+    let Ok(cfg) = load_node_config() else {
+        return Vec::new();
+    };
+    let Ok(guard) = peers::node_state().lock() else {
+        return Vec::new();
+    };
+    let mut out: Vec<(String, String)> = guard
+        .peers
+        .values()
+        .filter(|p| {
+            matches!(p.status, PeerStatus::Connected)
+                && is_identifier_approved(&cfg, &p.ip, &p.hostname)
+        })
+        .map(|p| (p.ip.clone(), p.hostname.clone()))
+        .collect();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out
+}
+
+#[derive(Serialize)]
+struct SessionTargetRow {
+    ip: String,
+    hostname: String,
+}
+
+fn session_targets(_args: &[&str], _ctx: &crate::modules::ExecutionContext) -> String {
+    let rows: Vec<SessionTargetRow> = connected_approved_session_peers()
+        .into_iter()
+        .map(|(ip, hostname)| SessionTargetRow { ip, hostname })
+        .collect();
+    serde_json::to_string(&rows).unwrap_or_else(|_| "[]".to_string())
+}
 
 pub fn execute_remote_command(
     target: &str,
@@ -91,6 +151,11 @@ pub fn commands() -> &'static [ModuleCommand] {
             name: "node",
             description: "manage LAN nodes: pair|connect|accept|reject|alias|save|auto|status",
             run: handlers::node,
+        },
+        ModuleCommand {
+            name: "session_targets",
+            description: "JSON [{\"ip\",\"hostname\"}] for connected approved LAN peers (remote route picker)",
+            run: session_targets,
         },
     ]
 }

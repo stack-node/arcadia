@@ -1,12 +1,17 @@
 pub mod lan;
 pub mod net;
+pub mod remote_mirror;
+pub mod remote_session;
 pub mod shell;
 pub mod shell_motd;
+pub mod surface;
 
-use crate::config::modules::{ModulesConfig, NET_MODULE_NAME};
+use crate::config::modules::{
+    ModulesConfig, LAN_MODULE_NAME, NET_MODULE_NAME, REMOTE_SESSION_MODULE_NAME,
+};
 use crate::config::ConfigFile;
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct ExecutionContext {
     pub net_as: Option<String>,
     pub net_timeout_ms: Option<u64>,
@@ -22,8 +27,10 @@ fn module_commands(module_name: &str) -> Option<&'static [ModuleCommand]> {
     match module_name {
         lan::NAME => Some(lan::commands()),
         net::NAME => Some(net::commands()),
+        remote_session::NAME => Some(remote_session::commands()),
         shell::NAME => Some(shell::commands()),
         shell_motd::NAME => Some(shell_motd::commands()),
+        surface::NAME => Some(surface::commands()),
         _ => None,
     }
 }
@@ -87,6 +94,8 @@ pub fn enabled_module_command_names(module_name: &str) -> Vec<String> {
         .collect()
 }
 
+/// Dispatches `module.command` locally or forwards via `ExecutionContext::net_as` (e.g. `lan:<host>`).
+/// LAN forwarding uses one code path for every registered token — peer runs normal module checks.
 pub fn execute_command(
     token: &str,
     args: &[&str],
@@ -100,10 +109,6 @@ pub fn execute_command(
         return Ok(None);
     };
 
-    if !module_enabled(module_name)? {
-        return Err(format!("Module {module_name} is disabled"));
-    }
-
     let Some(command) = commands.iter().find(|command| command.name == command_name) else {
         return Err(format!("Unknown command: {token}"));
     };
@@ -116,11 +121,29 @@ pub fn execute_command(
 
     if let Some(route) = &context.net_as {
         if let Some(target) = route.strip_prefix("lan:") {
+            if target.is_empty() {
+                return Err("Invalid LAN route: use lan:<host/ip/alias>".to_string());
+            }
+            if !module_enabled(REMOTE_SESSION_MODULE_NAME)? {
+                return Err(
+                    "LAN command routing requires remote-session module to be enabled locally"
+                        .to_string(),
+                );
+            }
+            if !module_enabled(LAN_MODULE_NAME)? {
+                return Err(
+                    "LAN command routing requires lan module to be enabled locally".to_string(),
+                );
+            }
             let response =
                 lan::execute_remote_command(target, token, args, context.net_timeout_ms)?;
             return Ok(Some(response));
         }
         return Err(format!("Unsupported net route: {route}"));
+    }
+
+    if !module_enabled(module_name)? {
+        return Err(format!("Module {module_name} is disabled"));
     }
 
     Ok(Some((command.run)(args, context)))
@@ -171,7 +194,14 @@ pub fn all_command_entries() -> Vec<(String, String)> {
 }
 
 pub fn load_all() {
-    let _known_modules = [lan::NAME, net::NAME, shell::NAME, shell_motd::NAME];
+    let _known_modules = [
+        lan::NAME,
+        net::NAME,
+        remote_session::NAME,
+        shell::NAME,
+        shell_motd::NAME,
+        surface::NAME,
+    ];
     lan::start_service();
 
     if let Err(err) = ModulesConfig::load_or_create() {
