@@ -225,7 +225,7 @@ struct LanNodesView: View {
                 rows.append(DiscoveredPeerRow(id: ip, hostname: hostname.isEmpty ? ip : hostname))
             }
         }
-        rows
+        return rows
     }
 
     /// Lines like `- hostname (192.168.1.2) [alias] -> connected` from `lan.node status`.
@@ -247,6 +247,6 @@ struct LanNodesView: View {
                 rows.append(KnownPeerRow(id: ip, hostname: hostname.isEmpty ? ip : hostname, ip: ip, status: status))
             }
         }
-        rows
+        return rows
     }
 }

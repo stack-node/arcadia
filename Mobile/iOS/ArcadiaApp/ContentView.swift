@@ -9,7 +9,7 @@ struct ContentView: View {
     let sidebarWidth: CGFloat = 292
     let sidebarSwipeThreshold: CGFloat = 80
 
-    @State private var navigationRegistry: NavigationRegistry
+    @State var navigationRegistry: NavigationRegistry
 
     @State var showSplash = true
     @State var isSidebarOpen = true

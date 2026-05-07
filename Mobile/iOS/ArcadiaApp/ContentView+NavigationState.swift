@@ -6,7 +6,7 @@ extension ContentView {
     }
 
     func isPageVisible(_ pageID: String) -> Bool {
-        guard let page = registry.pages.first(where: { $0.id == pageID }) else {
+        guard let page = navigationRegistry.pages.first(where: { $0.id == pageID }) else {
             return false
         }
         guard let required = page.requiredModule, !required.isEmpty else {
@@ -16,12 +16,12 @@ extension ContentView {
     }
 
     var activePage: PageDefinition {
-        if isPageVisible(activePageID), let page = registry.pages.first(where: { $0.id == activePageID }) {
+        if isPageVisible(activePageID), let page = navigationRegistry.pages.first(where: { $0.id == activePageID }) {
             return page
         }
-        if let firstVisible = registry.pages.first(where: { isPageVisible($0.id) }) {
+        if let firstVisible = navigationRegistry.pages.first(where: { isPageVisible($0.id) }) {
             return firstVisible
         }
-        return registry.pages[0]
+        return navigationRegistry.pages[0]
     }
 }
