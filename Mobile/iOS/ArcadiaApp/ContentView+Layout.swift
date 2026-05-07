@@ -170,6 +170,8 @@ extension ContentView {
     var contentBody: some View {
         if activePage.id == "global.modules" {
             ModulesView(modules: modules, onToggle: updateModule, onAppear: reloadModules)
+        } else if activePage.id == "network.overview" {
+            NetworkOverviewView(theme: theme, modules: modules)
         } else if activePage.id == "network.nodes" {
             LanNodesView(theme: theme)
         } else if activePage.id == "utility.shell" {

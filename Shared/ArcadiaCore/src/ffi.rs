@@ -221,6 +221,26 @@ pub fn lan_stop() {
     crate::modules::lan::stop_service();
 }
 
+#[derive(uniffi::Record)]
+pub struct LanServiceInfoFfi {
+    pub running: bool,
+    pub port: u16,
+    pub hostname: String,
+    pub module_enabled: bool,
+}
+
+/// LAN service status: running state, UDP port, hostname, and module-enabled flag.
+#[uniffi::export]
+pub fn lan_service_info() -> LanServiceInfoFfi {
+    let info = crate::modules::lan::lan_service_info();
+    LanServiceInfoFfi {
+        running: info.running,
+        port: info.port,
+        hostname: info.hostname,
+        module_enabled: info.module_enabled,
+    }
+}
+
 /// Object-oriented handle for module and command management.
 /// Useful for SwiftUI @StateObject / @Observable patterns.
 #[derive(uniffi::Object)]
