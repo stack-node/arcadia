@@ -1,104 +1,149 @@
 # Arcadia
 
-Arcadia is a multi-platform runtime and shell: one Rust core (`arcadia-core`) with thin native shells on macOS (CLI + GPUI) and iOS (SwiftUI + UniFFI). The core owns modules, commands, configuration, and navigation; surfaces render and dispatch.
+Arcadia is a multi-platform runtime and shell: one Rust core (**`arcadia-core`**) with thin native surfaces — Desktop (**CLI + GPUI**) and iOS (**SwiftUI + UniFFI**). The core owns modules, commands, configuration, navigation metadata, and LAN-linked execution; surfaces render state and dispatch **`execute_command`**.
+
+Design goals:
+
+- **Registry-driven**: modules and navigation pages are registered once in core; CLI, GUI, and mobile derive lists from there.
+- **Thin clients**: any surface can treat a LAN peer as the **host of record** for modules + navigation JSON via **`surface.snapshot`**, while **`thin-client.toml`** and **`ARCADIA_NET_AS`** persist/bootstrap the route.
+
+See **`CLAUDE.md`** / **`AGENTS.md`** for agent/contributor rules (no hardcoded page IDs in visibility logic, theme tokens only in theme layers, etc.).
+
+---
 
 ## What ships
 
 | Surface | Location | Notes |
 |--------|----------|--------|
-| **Desktop CLI** | `Desktop/` · feature `headless` | Interactive REPL (rustyline), completion, config/module commands |
-| **Desktop GUI** | `Desktop/` · feature `gui` | GPUI window: splash, sidebar, shell/TUI, modules, registry-driven pages |
-| **iOS app** | `Mobile/iOS/ArcadiaApp/` | SwiftUI + `ArcadiaCore.xcframework`; navigation from JSON exported by core |
-| **Scripts** | `Shared/Scripts/` | Launcher menus, iOS framework build, optional global CLI wrappers |
-| **Dev launcher (macOS)** | `Launchers/Development/OSX/` | Optional menu-bar helper; `build-app.sh` builds `.app` (uses production app icon source) |
+| **Desktop CLI** | `Desktop/` · default **`headless`** | Interactive REPL (rustyline), **`module`**, config helpers |
+| **Desktop GUI** | `Desktop/` · **`--features gui`** | GPUI: sidebar, registry-driven pages, shell/TUI, modules, LAN nodes, **session route** (**`lan:…`**) for thin client |
+| **iOS app** | `Mobile/iOS/ArcadiaApp/` | SwiftUI + **`ArcadiaCore.xcframework`**; navigation from core JSON and/or **remote `surface.snapshot`** |
+| **Headless “server”** | Same **`Desktop`** binary without **`gui`** | Runs core + LAN service + REPL; GUI peers route commands with **`net_as: lan:…`** |
+
+---
 
 ## Repository layout
 
 ```
-Shared/ArcadiaCore/              # Rust library (crate: arcadia-core)
+Shared/ArcadiaCore/                 # Crate: arcadia-core (staticlib / cdylib / lib)
   src/
     lib.rs
-    ffi.rs                       # UniFFI exports → Swift
-    navigation.rs                # PAGE_DEFINITIONS, GROUP_DEFINITIONS, JSON export (incl. optional required_module per page)
-    config/                      # modules.toml schema, MODULE_REGISTRY (single module list + deps)
-    modules/                     # shell, net, lan/, … — command handlers
-  Scripts/
-    build-ios-framework.sh       # release libs + Swift bindings + ArcadiaCore.xcframework
-    Launcher.sh / Launcher.ps1   # interactive build/deploy menu
-    install-global-commands-macos.sh
+    ffi.rs                          # UniFFI → Swift (execute_command, navigation JSON, thin_client_*, mirror drain, …)
+    navigation.rs                   # PAGE_DEFINITIONS, GROUP_DEFINITIONS; NavigationRegistryOwned JSON for snapshots
+    config/
+      modules.rs                    # MODULE_REGISTRY, ModulesConfig → ~/Arcadia/Configuration/modules.toml
+      thin_client.rs                # ThinClientConfig → thin-client.toml (preferred route + surface_client_id)
+      …
+    modules/
+      shell.rs, net.rs, lan/, …
+      surface.rs                    # surface.snapshot / surface.patch (modules + revision + nav mirror)
+      remote_session.rs             # Routing gate only (no commands); enables net_as lan:… locally
+      remote_mirror.rs              # Host-side NODE_EXEC transcript + UI sync batch for FFI
 
-Desktop/                         # Binary crate: arcadia (CLI + GUI features)
-  src/
-    main.rs
-    cli/                         # REPL, args, completion, config/module CLI
-    gui/
-      assets.rs                  # Embedded SVGs; app badge PNG from Resources/Icons/Production
-      app/                       # GPUI root: entry, lifecycle, navigation helpers, sidebar, shell, splash, root UI
-      theme/                     # Colors, icons, nav accent palettes, module chrome
-      tui/                       # Embedded terminal UI session helpers
+Desktop/                            # Binary: arcadia
+  src/main.rs                       # gui vs headless via features
+  cli/
+  gui/                              # GPUI app (features gui)
 
 Mobile/iOS/
-  ArcadiaApp/                    # SwiftUI sources (ContentView split across ContentView+*.swift)
-  ArcadiaApp.xcodeproj/
-  ArcadiaCore/                   # Generated Swift bindings + xcframework (rebuild after core FFI changes)
+  ArcadiaApp/                       # SwiftUI (ContentView+, SidebarView, LanNodesView, …)
+  ArcadiaCore/                      # Generated Swift + ArcadiaCore.xcframework (rebuild after core/FFI changes)
 
-Resources/
-  Icons/
-    Production/                  # Canonical raster icons (app store 1024, in-app badge master)
-    Prototypes/                  # Draft / exploratory artwork (not referenced by build)
-  Wallpapers/                    # Optional shared imagery
-  Sounds/                        # Notification samples
+Shared/Scripts/
+  build-ios-framework.sh            # iOS device/sim libs + UniFFI Swift + xcframework
+  Launcher.sh / Launcher.ps1
+  install-global-commands-macos.sh
 
-Configuration/                   # User config layout (see Arcadia config root on disk)
-Launchers/Development/OSX/       # macOS dev launcher package + build-app.sh
-
-.github/workflows/               # CI (multi-platform desktop + iOS simulator)
+Resources/                          # Icons, wallpapers, sounds (see tree in repo)
+Configuration/                      # Layout reference (runtime uses ~/Arcadia/Configuration on Desktop)
+Launchers/Development/OSX/        # Optional dev launcher; see Launchers/Development/OSX/README.md
+.github/workflows/                # CI (desktop + iOS simulator paths)
 ```
+
+---
 
 ## Architecture
 
 ### Single sources of truth (core)
 
-- **`MODULE_REGISTRY`** in `Shared/ArcadiaCore/src/config/modules.rs` — module names, versions, and `required_modules` edges. GUI, CLI, and iOS consume this indirectly via config and command routing.
-- **`PAGE_DEFINITIONS` / `GROUP_DEFINITIONS`** in `navigation.rs` — navigation metadata. Each page may set **`required_module`** (e.g. shell for `utility.shell`, net for `network.overview`). Serialized to JSON for iOS and used by the desktop shell for visibility.
-- **`execute_command`**, LAN helpers, and module commands live under `modules/`; FFI in `ffi.rs` exposes the subset needed by mobile.
+| Concern | Location | Consumed by |
+|--------|----------|-------------|
+| Module list + dependency edges | **`MODULE_REGISTRY`** in **`config/modules.rs`** | CLI, GPUI, iOS module list |
+| Static navigation shape | **`PAGE_DEFINITIONS`**, **`GROUP_DEFINITIONS`** in **`navigation.rs`** | Compiled Desktop helpers; JSON export |
+| Serializable navigation for snapshots | **`NavigationRegistryOwned`** | Embedded in **`surface.snapshot.extra.navigation_registry`** |
+| Module on/off state | **`ModulesConfig`** (**`modules.toml`**) | Every surface when showing **local** host |
 
-### Desktop (`Desktop/`)
+### Command execution
 
-- **`headless`** and **`gui`** are Cargo features; default feature set is defined in `Desktop/Cargo.toml`.
-- GUI code under `gui/app/` composes the window: splash sequence, top bar, sidebar, active page content, modules UI, shell/TUI.
-- **`gui/theme/`** centralizes colors and icon paths; do not scatter raw RGB in view code.
-- Embedded UI badge: virtual asset `icons/app-icon.png` is compiled from **`Resources/Icons/Production/Final-1-appicon.png`**.
+- Tokens are **`module.command`** (e.g. **`shell.execute`**, **`lan.scan`**, **`surface.snapshot`**).
+- **`execute_command`** in **`modules/mod.rs`** dispatches locally or forwards when **`ExecutionContext.net_as`** is set (e.g. **`lan:192.168.1.10`**). LAN forwarding requires **local** **`remote-session`**, **`lan`**, and **`net`** enabled; the peer runs normal module checks.
+- **`remote-session`** has **no command verbs** — it is only the **permission flag** to route over LAN.
 
-### iOS (`Mobile/iOS/`)
+### Surface mirror API (thin client / multi-peer)
 
-- On launch, the app sets the config root (app support), then loads **`navigationRegistryJson()`** from core to populate **`NavigationRegistry`** / **`PageDefinition`** (including optional **`requiredModule`**).
-- **`ModuleNames.swift`** mirrors core module name strings for clarity.
-- Module toggles debounce and use **`probeModuleToggle`** when enabling with dependency checks.
+- **`surface.snapshot`** returns JSON: **`modules`**, monotonic **`revision`** (bumped after successful **`surface.patch`** batches), and **`extra.navigation_registry`** (host nav JSON). Clients use this when **`remote_route`** / **`net_as`** points at a peer.
+- **`surface.patch`** accepts a JSON array of tagged operations (today **`modules_set`**). Optional **`client_id`** identifies the GUI peer (persisted per machine in **`thin-client.toml`**).
+- **`lan.session_targets`** returns JSON for connected, approved LAN peers (route picker).
+
+**Multi-client caveat:** Host **`modules.toml`** is shared. Concurrent GUIs see the same truth after reload; simultaneous toggles are **last writer wins** — **`revision`** helps detect change but does not merge conflicts.
+
+### Desktop GUI behavior
+
+- **Session chip**: **`lan:<host>`** vs local; persists **`preferred_remote_route`** via **`thin-client.toml`** when you pick a peer (also clears on Local).
+- **Startup route:** **`ARCADIA_NET_AS`** overrides saved preference; otherwise **`thin-client.toml`** if **`lan`** + **`remote-session`** are enabled.
+- When routed remotely, sidebar/nav can reflect **`surface.snapshot`** **`navigation_registry`** so newer host layouts appear without rebuilding the client binary.
+
+### iOS behavior
+
+- Calls **`set_config_root_path`** early (app sandbox).
+- **`navigationRegistry`** loads from **`navigation_registry_json()`** locally; when **`remoteRoute`** is set, **`surface.snapshot`** can replace registry from **`extra.navigation_registry`**.
+- **`thinClientPreferredRouteGet` / `thinClientPreferredRouteSet` / `thinClientSurfaceClientId`** mirror Desktop **`thin-client.toml`** + patch attribution.
+- **`ARCADIA_NET_AS`** in the scheme/environment behaves like Desktop for bootstrap.
+
+---
+
+## Configuration (user disk)
+
+Default root: **`~/Arcadia/Configuration/`** (see **`Shared/ArcadiaCore/src/config/mod.rs`**).
+
+| File | Purpose |
+|------|---------|
+| **`modules.toml`** | Per-module enable/disable ( **`ModulesConfig`** ) |
+| **`commandline.toml`** | CLI-only preferences |
+| **`thin-client.toml`** | **`preferred_remote_route`** (`lan:…`), **`surface_client_id`** (UUID for **`surface.patch`**) |
+| LAN pairing | Managed via **`lan.node`** / handlers (see **`modules/lan/`**) |
+
+---
 
 ## Prerequisites
 
 | Tool | Used for |
 |------|-----------|
-| Rust (`rustup`, `cargo`) | All desktop + core builds |
+| Rust (`rustup`, `cargo`) | Core + Desktop |
 | Xcode + CLI tools | iOS app and xcframework |
-| `rg` (ripgrep) | Some launcher deploy flows |
+| **`rustup target`** `aarch64-apple-ios`, `aarch64-apple-ios-sim` | **`build-ios-framework.sh`** |
+
+---
 
 ## Build and run
 
-### Desktop (from repo root)
+### Desktop GUI
 
 ```sh
 cd Desktop && cargo build --features gui && cargo run --features gui
 ```
 
-Headless CLI:
+### Desktop CLI (headless)
+
+Default Cargo features are **`headless`** only:
 
 ```sh
-cd Desktop && cargo build --features headless && cargo run --features headless
+cd Desktop && cargo run
 ```
 
-Release:
+With **`--features gui`**, the **`gui`** feature takes **`main`** (GPUI window); headless remains declared but unused at runtime.
+
+### Desktop release
 
 ```sh
 cd Desktop && cargo build --release --features gui
@@ -110,62 +155,56 @@ cd Desktop && cargo build --release --features gui
 cd Shared && cargo test -p arcadia-core
 ```
 
-### iOS framework + bindings
-
-After any change to `ArcadiaCore` APIs used from Swift:
+### iOS framework + Swift bindings (**required after `ffi.rs` or exported Rust API changes**)
 
 ```sh
 bash Shared/Scripts/build-ios-framework.sh
 ```
 
-Outputs Swift bindings and **`Mobile/iOS/ArcadiaCore/ArcadiaCore.xcframework`**. Then build in Xcode or use **`Shared/Scripts/Launcher.sh`** for common flows.
+Refreshes **`Mobile/iOS/ArcadiaCore/Generated/`** and **`ArcadiaCore.xcframework`** (device + simulator static libs). Open Xcode and build **`ArcadiaApp`** afterward.
 
 ### Launcher menus
 
 ```sh
-bash Shared/Scripts/Launcher.sh       # macOS / Unix-like
-pwsh Shared/Scripts/Launcher.ps1      # PowerShell
+bash Shared/Scripts/Launcher.sh
+pwsh Shared/Scripts/Launcher.ps1
 ```
 
-### Global commands (macOS)
+### Global CLI wrappers (macOS)
 
 ```sh
 bash Shared/Scripts/install-global-commands-macos.sh
 ```
 
-Installs wrappers (e.g. `arcadia`, `arcadia-gui`, `arcadia-ios`) into `~/.local/bin`. Ensure that directory is on your **`PATH`**.
+Ensures **`~/.local/bin`** wrappers (**`arcadia`**, **`arcadia-gui`**, etc.) are on **`PATH`**.
 
-### macOS development launcher app
+---
 
-See **`Launchers/Development/OSX/README.md`**. **`build-app.sh`** rasterizes icons from **`Resources/Icons/Production/Final-1-appicon-1024.png`** into the app icon set.
+## Environment variables
 
-### iOS deploy environment variables
+| Variable | Where | Purpose |
+|----------|-------|---------|
+| **`ARCADIA_NET_AS`** | Desktop GUI, iOS | Bootstrap **`net_as`** route (e.g. **`lan:192.168.1.5`**). Overrides **`thin-client.toml`** preference on startup. |
+| **`ARCADIA_IOS_DEVICE_NAME`** | iOS deploy scripts | Pin install target by device name |
+| **`ARCADIA_IOS_FORCE_UNINSTALL`** | iOS deploy scripts | Uninstall existing app before install |
 
-```text
-ARCADIA_IOS_DEVICE_NAME="My iPhone"   # pin a device by name
-ARCADIA_IOS_FORCE_UNINSTALL=1         # uninstall existing app before install
-```
+---
 
-## Command model
+## Adding features (short pointers)
 
-Commands are **`module.command`** tokens, e.g. **`shell.execute`**, **`lan.scan`**, **`lan.node …`**. The CLI adds **`module …`** and **`configuration …`** helpers. Remote routing appends flags such as **`--net:as lan:<target>`** and **`--net:timeout <ms>`** where supported.
+- **New module:** **`MODULE_REGISTRY`** + **`modules/<name>.rs`** + **`modules/mod.rs`** — see **`CLAUDE.md`**.
+- **New navigation page:** **`PAGE_DEFINITIONS`** / **`GROUP_DEFINITIONS`** + surface panel + routing derived from module state — not hardcoded visibility tables.
+- **New thin-client payload:** extend **`SurfaceSnapshot.extra`** or **`SurfacePatch`** enum in **`modules/surface.rs`**; keep surfaces consuming **`surface.snapshot`** / **`surface.patch`** rather than one-off remote-session verbs.
 
-## Module registration
-
-Add a **`ModuleManifest`** entry to **`MODULE_REGISTRY`**, a name constant, **`modules/<name>.rs`** with **`commands()`**, and register the module in **`modules/mod.rs`**. Dependency edges are **only** declared on the manifest rows in **`config/modules.rs`**.
-
-## Configuration
-
-- **Desktop**: config under the Arcadia config directory (e.g. under the user home layout described in core).
-- **iOS**: app sets config root at startup.
-
-Key files: **`modules.toml`**, **`commandline.toml`** (CLI appearance and behavior).
+---
 
 ## CI
 
-**`.github/workflows/stable-build-matrix.yml`** builds desktop targets and the iOS simulator configuration on pushes to **`stable`**.
+**`.github/workflows/`** — builds desktop targets and iOS-related configurations on selected branches (see workflow files for triggers).
+
+---
 
 ## Contributing
 
-- **`CLAUDE.md`** and **`AGENTS.md`** describe registry-driven conventions (navigation, modules, theme colors). Prefer extending registries over hardcoding page or module IDs in surface code.
-- Regenerate the iOS framework when changing **`ffi.rs`** or exported core behavior relied on by Swift.
+- Follow **`AGENTS.md`**: registry-driven modules/pages, **`is_module_enabled(name)`**, theme tokens in theme modules only.
+- After FFI changes: run **`build-ios-framework.sh`** and commit **`Generated/`** + **`xcframework`** artifacts per team practice.
