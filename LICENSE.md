@@ -1,4 +1,4 @@
-Arcadia Community License (ACL) v1.4
+Arcadia Community License (ACL) v1.5
 Copyright (c) 2026 stackno.de
 
 Preamble
@@ -114,14 +114,14 @@ copy of this Software to:
 - modify the Software;
 - distribute original or modified versions of the Software;
 - create extensions, modules, plugins, tools, educational resources,
-  integrations, and derivative works;
+  integrations, and derivative works for non-commercial purposes;
 - self-host, fork, and archive the Software;
 - teach with, learn from, and experiment with the Software;
 - use the Software as a component within a larger non-commercial or
   community project;
-- build and distribute products and services on top of the Software,
-  provided You are not a Large Corporation, the use is not
-  Profit-Focused Use, and all conditions of this license are met.
+- build and distribute non-commercial products and services on top of
+  the Software, provided You are not a Large Corporation and all
+  conditions of this license are met.
 
 Education and Learning
 
@@ -208,8 +208,13 @@ of the Software:
    charge, via a publicly accessible URL or repository.
 
    Extensions, applications, themes, modules, tools, content, and user
-   creations built on top of Arcadia are exempt from this requirement and
-   may use any license chosen by their creators.
+   creations built on top of Arcadia are exempt from the source-disclosure
+   requirement of this clause and may apply any license of their creator's
+   choosing for distribution purposes.
+
+   This exemption applies solely to the source-disclosure requirement. It
+   does not grant permission to sell, charge for, or otherwise
+   commercialize any such work. See Condition 4a.
 
    For the avoidance of doubt: building a product or service that calls
    into the Software's public API does not trigger this clause. Only
@@ -282,6 +287,37 @@ of the Software:
    internal productivity tool is permitted. A startup building and
    selling an Arcadia-powered product as its primary commercial offering
    is not permitted without explicit written permission.
+
+4a. No Sale of Derivatives, Extensions, or Platform-Dependent Works
+
+    No extension, module, plugin, theme, integration, tool, derivative
+    work, or any other software component built to operate with, on top
+    of, or as part of the Arcadia platform may be sold, licensed for a
+    fee, bundled into a paid product, or otherwise commercialized without
+    explicit prior written permission from the copyright holder.
+
+    This applies regardless of:
+    - how extensively the work has been modified or transformed;
+    - whether the work is distributed separately or as part of a larger
+      product;
+    - whether the creator claims independent copyright in the work; or
+    - what license the creator has applied to the work under Condition 2.
+
+    The act of building on the Arcadia platform does not grant commercial
+    rights in the resulting work. Those rights must be separately and
+    explicitly granted.
+
+    Carve-out — Your own output:
+    Content, data, code, documents, scripts, or other output produced by
+    You using Arcadia as a terminal, shell, or development environment —
+    and that does not itself incorporate, bundle, or depend upon the
+    Software or any extension of it — remains entirely Your own property
+    and is not subject to this condition. If you write a Python script
+    inside Arcadia's shell, that script is yours. If you write a module
+    that plugs into Arcadia, that module is covered by this condition.
+
+    Breach of this condition constitutes willful infringement and carries
+    no cure window. Rights terminate immediately.
 
 5. Anti-Evasion and Circumvention
 
@@ -560,6 +596,7 @@ The following breaches carry no cure window and result in immediate,
 automatic termination of all rights:
 - breach of the Large Corporation Restriction (Condition 3);
 - breach of the Commercial Use and Profit Restriction (Condition 4);
+- breach of the No Sale of Derivatives condition (Condition 4a);
 - breach of the Anti-Evasion clause (Condition 5);
 - initiation of patent litigation in violation of Condition 11;
 - any willful or deliberate breach of any condition.
