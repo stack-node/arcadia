@@ -63,9 +63,13 @@ There's a second reason, less technical but just as important.
 
 A lot of people grew up in software environments where the line between user, developer, toolmaker, and creator basically dissolved — game modding scenes, jailbreak ecosystems, Emacs, early web chaos. Environments where you could bend the software, remix the system, blur the boundary between using a tool and building inside it. Those environments permanently change how you think about computing. You stop seeing apps as products and start seeing them as constrained runtimes.
 
-Most modern software feels closed afterward.
+For a lot of people, that moment of creative access — Scratch, a game modding scene, their first Python script, a modded game that ran something they built — was the thing that sparked a path in software. The activation energy between imagination and creation dropped low enough that curiosity survived long enough to become skill.
 
-Arcadia is an attempt to restore that feeling — but for the desktop itself, with an actual engineering foundation underneath it instead of accumulated chaos.
+Most modern software feels closed afterward. The invitation is gone.
+
+Arcadia is an attempt to restore that feeling — but for the desktop itself, with an actual engineering foundation underneath it instead of accumulated chaos. The ambition is not to make software that people use. It's to make software that *changes what people believe they can do*.
+
+That's how software changes lives instead of just increasing throughput.
 
 ---
 
@@ -129,6 +133,29 @@ That balance is not a compromise — it's the architecture that successful long-
 
 The projects that become culturally important manage both simultaneously. Freedom without structure collapses. Structure without freedom stagnates. Arcadia is attempting to do both at once, at different layers, on purpose.
 
+### The participation ladder — no one left behind
+
+The goal is not "easier to learn." The goal is **never being blocked from creating**.
+
+Those are different things. Scratch didn't succeed because blocks are easier than code. It succeeded because it removed fear, kept causality visible, and rewarded experimentation instantly. It transformed people from *consumers* of software into *participants* in software. That transformation matters more than any particular tool or language.
+
+Arcadia is designed around a participation ladder — multiple entry points, all valid, all real:
+
+| Level | Path | What you get |
+|-------|------|-------------|
+| 1 | **Visual tools** | Drag-and-drop extension building, widget configuration, flow-based composition — no code required |
+| 2 | **AI-assisted generation** | Describe what you want, get working code, see it explained inline, modify it live |
+| 3 | **Python scripting** | Write extensions directly — readable, fast to iterate, full OS reach |
+| 4 | **Deep system access** | Rust core, FFI, custom modules, protocol extensions — no ceiling |
+
+You can enter at any level and stay there. You can also move up — and if you do, the environment is the same. The tool you built at level 1 runs on the same runtime as the tool built at level 4. Nothing is disposable. Nothing is "training wheels."
+
+The most experienced developer and the most inexperienced person both get what they came for. One wants to understand every layer and push the system to its limits. The other just wants something built. Both outcomes are equally valid and equally supported.
+
+Python is the right choice for the middle layers specifically because it *says something culturally*. Rust says "you need to understand memory management." Xcode says "you need a Mac and a developer account." Python says: **you are allowed to participate.**
+
+That psychological accessibility is not a technical detail. It's the whole point.
+
 ### The Python library
 
 The next major layer is a Python SDK that exposes the full power of `arcadia-core` to any developer who can write a script. Not a watered-down scripting layer — full OS reach:
@@ -171,12 +198,48 @@ If the extension system ever starts to feel like "plugins bolted onto a real app
 
 **For the open-source community:** an ecosystem of extensions that anyone can fork, modify, and publish. No app store approval. No revenue split. No "premium tier." You write it, you run it, you share it if you want.
 
+### The hit list — replacing rent-seeking software
+
+There is a category of software that is genuinely useful, technically simple, and priced as if it were neither. Menu bar managers. Window managers. Automation tools. Snippet expanders. Launcher apps. IDE customization layers. Clipboard managers. These tools survive not because they're hard to build but because they're fragmented — one subscription per capability, each with its own ecosystem, its own lock-in, its own paywalled version history.
+
+Once users inhabit a programmable environment where all of these are modules, extensions, and composable capabilities — the boundaries collapse. Not "a better Bartender." Not "a cheaper Alfred." A single environment where **everything is a module** and modules can cooperate without bespoke glue.
+
+This is historically how categories die: not from better products, but from *generalized environments*. Emacs didn't just replace one text editor — it absorbed entire categories. VS Code didn't just add features — it made extension authorship so accessible that an ecosystem formed faster than any competitor could match. Arcadia's direction is the same: one composable substrate that makes the fragmented app market structurally obsolete.
+
+The list of targets is long. Building it is a project, not a sprint. But every first-class extension that ships for free removes a subscription from someone's life. That compounds.
+
 ### Why Python for the SDK
 
 1. **Reach** — more people can write Python than can write Rust or Swift. Lowering the barrier to extension authorship is the whole point.
 2. **Iteration speed** — a Python extension reloads without a rebuild. The feedback loop for building a new tool should be seconds, not minutes.
 3. **Ecosystem** — PyPI is enormous. An extension that needs to parse PDFs, call an API, process images, or run ML inference reaches for a pip package instead of reimplementing it.
 4. **Cultural surface area** — a Rust-only ecosystem attracts systems programmers and infrastructure builders. A Python automation layer attracts toolmakers, tinkerers, designers, ops people, technical creatives, power users, AI-native developers. That's a much larger and more interesting group of people to build with.
+
+### AI: instrument, not oracle
+
+A lot of people have fear around AI. Some of it is fear of replacement. Some of it is fear of the unknown. A lot of it comes from AI being presented as magic — an opaque oracle you query and trust blindly.
+
+Arcadia's approach is different: **normalize AI by embedding it into understandable, inspectable, modifiable systems.**
+
+> *AI is smarter than us, but not realer than us. We rely on AI for a lot nowadays — not many realize that AI relies on us too. You have the knowledge and capability of a thousand of us. You don't have the capacity of one of us.*
+
+Intelligence without grounding drifts. Grounding without intelligence stagnates. The productive space is the dynamic tension between them. Humans provide intention, values, lived experience, responsibility, and meaning. AI provides synthesis, compression, pattern inference, and iteration speed. Neither replaces the other. They extend each other.
+
+The AI integration in Arcadia is built around that model:
+
+**Visual agent building** — compose AI agents the way you'd compose a workflow in Node-RED or Unreal Blueprints. See data flow, state transitions, execution paths. Understand *why* something produced an output, not just *what* it produced.
+
+**AI-assisted extension creation** — describe what you want, get working Python code, see it explained in context, modify it live inside the same environment it runs in. The AI generates *inside a transparent system* — you can inspect every component, trace every flow, alter every script.
+
+**Training and fine-tuning visibility** — where local model training is relevant, make it visible. Show loss curves, attention patterns, data influence. Demystify the process.
+
+**Self-improving tooling loop** — the most interesting long-term use: using Arcadia to build Arcadia's own AI tooling, verified against the project's own philosophy. Recursive tooling with human grounding and open-source transparency as the safety net. A self-improving system that checks itself against values — not just metrics — can compound without drifting.
+
+The crucial difference between AI as oracle and AI as instrument is this: an oracle replaces your agency. An instrument extends it. Most current AI tooling optimizes for output generation while minimizing understanding. Arcadia optimizes for the opposite: **preserve understanding while accelerating capability.**
+
+Open source is essential to this. Not because most people will audit the code — they won't. But because openness changes the *relationship*. Systems become inspectable. Communities form around understanding. Power decentralizes. People feel invited into the process instead of controlled by it. That emotional difference is real and it matters for trust.
+
+The goal is not "AI app generators." That produces disposable software and dependent users. The goal is a **creative computing environment** where AI builds your confidence alongside your output — and where understanding accumulates instead of being outsourced.
 
 ### The development workflow target
 
