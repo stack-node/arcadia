@@ -1,6 +1,37 @@
 use crate::modules::{ExecutionContext, ModuleCommand};
+use std::sync::OnceLock;
 
 pub const NAME: &str = "shell";
+type InternalExecutor = fn(&str) -> String;
+static INTERNAL_EXECUTOR: OnceLock<InternalExecutor> = OnceLock::new();
+
+pub fn set_internal_executor(executor: InternalExecutor) {
+    let _ = INTERNAL_EXECUTOR.set(executor);
+}
+
+fn strip_ansi_sequences(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        // Drop ANSI CSI sequences: ESC [ ... final-byte.
+        if bytes[i] == 0x1B && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            i += 2;
+            while i < bytes.len() {
+                let b = bytes[i];
+                if (0x40..=0x7E).contains(&b) {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+    out
+}
 
 fn execute(args: &[&str], context: &ExecutionContext) -> String {
     if args.is_empty() {
@@ -31,15 +62,21 @@ fn execute(args: &[&str], context: &ExecutionContext) -> String {
 
         match output {
             Ok(output) => {
-                let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                let stdout = strip_ansi_sequences(&String::from_utf8_lossy(&output.stdout));
+                let stderr = strip_ansi_sequences(&String::from_utf8_lossy(&output.stderr));
                 let mut lines = Vec::new();
-                lines.push(format!("exit: {:?}", output.status.code()));
                 if !stdout.is_empty() {
-                    lines.push(format!("stdout:\n{stdout}"));
+                    lines.push(stdout);
                 }
                 if !stderr.is_empty() {
-                    lines.push(format!("stderr:\n{stderr}"));
+                    lines.push(stderr);
+                }
+                if !output.status.success() {
+                    if let Some(code) = output.status.code() {
+                        lines.push(format!("(exit code: {code})"));
+                    } else {
+                        lines.push("(process terminated by signal)".to_string());
+                    }
                 }
                 lines.join("\n")
             }
@@ -48,10 +85,29 @@ fn execute(args: &[&str], context: &ExecutionContext) -> String {
     }
 }
 
+fn internal(args: &[&str], context: &ExecutionContext) -> String {
+    if args.is_empty() {
+        return "Usage: shell.internal <command...>".to_string();
+    }
+    let _ = context;
+    let command_line = args.join(" ");
+    match INTERNAL_EXECUTOR.get() {
+        Some(executor) => executor(&command_line),
+        None => "shell.internal is not available in this runtime".to_string(),
+    }
+}
+
 pub fn commands() -> &'static [ModuleCommand] {
-    &[ModuleCommand {
-        name: "execute",
-        description: "execute shell command(s): shell.execute <command...>",
-        run: execute,
-    }]
+    &[
+        ModuleCommand {
+            name: "execute",
+            description: "execute shell command(s): shell.execute <command...>",
+            run: execute,
+        },
+        ModuleCommand {
+            name: "internal",
+            description: "execute internal CLI command(s): shell.internal <command...>",
+            run: internal,
+        },
+    ]
 }

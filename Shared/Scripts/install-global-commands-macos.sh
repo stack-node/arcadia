@@ -14,6 +14,8 @@ cat > "${BIN_DIR}/arcadia" <<EOF
 set -euo pipefail
 
 export PATH="${CARGO_BIN}:\${PATH}"
+PROJECT_ROOT="${ROOT_DIR}/.."
+DESKTOP_MANIFEST="Desktop/Cargo.toml"
 CONFIG_ROOT="\${HOME}/Arcadia/Configuration"
 
 open_config_file() {
@@ -37,9 +39,9 @@ if [[ "\${1:-}" == "configuration" ]]; then
   exit 0
 fi
 
-cd "${ROOT_DIR}"
-cargo build -p arcadia --no-default-features --features headless >/dev/null
-exec "${ROOT_DIR}/target/debug/arcadia" "\$@"
+cd "\${PROJECT_ROOT}"
+cargo build --manifest-path "\${DESKTOP_MANIFEST}" --target-dir target --no-default-features --features headless >/dev/null
+exec "\${PROJECT_ROOT}/target/debug/arcadia" "\$@"
 EOF
 
 cat > "${BIN_DIR}/arcadia-gui" <<EOF
@@ -47,6 +49,8 @@ cat > "${BIN_DIR}/arcadia-gui" <<EOF
 set -euo pipefail
 
 export PATH="${CARGO_BIN}:\${PATH}"
+PROJECT_ROOT="${ROOT_DIR}/.."
+DESKTOP_MANIFEST="Desktop/Cargo.toml"
 CONFIG_ROOT="\${HOME}/Arcadia/Configuration"
 
 open_config_file() {
@@ -70,12 +74,107 @@ if [[ "\${1:-}" == "configuration" ]]; then
   exit 0
 fi
 
-cd "${ROOT_DIR}"
-cargo build -p arcadia --no-default-features --features gui >/dev/null
-exec "${ROOT_DIR}/target/debug/arcadia" "\$@"
+cd "\${PROJECT_ROOT}"
+cargo build --manifest-path "\${DESKTOP_MANIFEST}" --target-dir target --no-default-features --features gui >/dev/null
+exec "\${PROJECT_ROOT}/target/debug/arcadia" "\$@"
 EOF
 
-chmod +x "${BIN_DIR}/arcadia" "${BIN_DIR}/arcadia-gui"
+cat > "${BIN_DIR}/arcadia-ios" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+PROJECT_ROOT="${ROOT_DIR}/.."
+PROJECT_PATH="Mobile/iOS/ArcadiaApp.xcodeproj"
+SHARED_BUILD_SCRIPT="${ROOT_DIR}/Scripts/build-ios-framework.sh"
+DERIVED_DATA_PATH="\${PROJECT_ROOT}/build/ios-device"
+BUNDLE_ID="com.stacknode.arcadia"
+PREFERRED_DEVICE_NAME="\${ARCADIA_IOS_DEVICE_NAME:-}"
+DESTINATIONS=""
+DEVICE_UDID=""
+
+if ! command -v xcodebuild >/dev/null 2>&1; then
+  echo "Error: xcodebuild not found. Install Xcode command line tools."
+  exit 1
+fi
+
+if [[ ! -d "\${PROJECT_ROOT}/\${PROJECT_PATH}" ]]; then
+  echo "Error: iOS project not found at \${PROJECT_ROOT}/\${PROJECT_PATH}"
+  exit 1
+fi
+
+if [[ ! -f "\${SHARED_BUILD_SCRIPT}" ]]; then
+  echo "Error: shared iOS build script not found at \${SHARED_BUILD_SCRIPT}"
+  exit 1
+fi
+
+cd "\${PROJECT_ROOT}" || exit 1
+
+if ! command -v rg >/dev/null 2>&1; then
+  echo "Error: rg (ripgrep) not found. Install via 'brew install ripgrep' and retry."
+  exit 1
+fi
+
+DESTINATIONS="\$(
+  xcodebuild \
+    -project "\${PROJECT_PATH}" \
+    -scheme "ArcadiaApp" \
+    -showdestinations 2>/dev/null
+)"
+
+if [[ -n "\${PREFERRED_DEVICE_NAME}" ]]; then
+  DEVICE_UDID="\$(
+    printf "%s\n" "\${DESTINATIONS}" | \
+      rg "platform:iOS, arch:arm64, id:[^,]+, name:\${PREFERRED_DEVICE_NAME}" | \
+      rg -o "id:[^,]+" | \
+      cut -d: -f2 | \
+      head -n 1
+  )"
+fi
+
+if [[ -z "\${DEVICE_UDID}" ]]; then
+  DEVICE_UDID="\$(
+    printf "%s\n" "\${DESTINATIONS}" | \
+      rg "platform:iOS, arch:arm64, id:" | \
+      rg -o "id:[^,]+" | \
+      cut -d: -f2 | \
+      head -n 1
+  )"
+fi
+
+if [[ -z "\${DEVICE_UDID}" ]]; then
+  echo "Error: no connected physical iOS device found."
+  echo "Hint: set ARCADIA_IOS_DEVICE_NAME to your device name and retry."
+  exit 1
+fi
+
+echo "Building shared iOS artifacts..."
+bash "\${SHARED_BUILD_SCRIPT}"
+
+xcodebuild \
+  -project "\${PROJECT_PATH}" \
+  -scheme "ArcadiaApp" \
+  -configuration "Release" \
+  -destination "id=\${DEVICE_UDID}" \
+  -derivedDataPath "\${DERIVED_DATA_PATH}" \
+  build
+
+APP_PATH="\${DERIVED_DATA_PATH}/Build/Products/Release-iphoneos/ArcadiaApp.app"
+if [[ ! -d "\${APP_PATH}" ]]; then
+  echo "Error: built app not found at \${APP_PATH}"
+  exit 1
+fi
+
+echo "Installing app on device \${DEVICE_UDID}..."
+if [[ "\${ARCADIA_IOS_FORCE_UNINSTALL:-0}" == "1" ]]; then
+  xcrun devicectl device uninstall app --device "\${DEVICE_UDID}" "\${BUNDLE_ID}" >/dev/null 2>&1 || true
+fi
+xcrun devicectl device install app --device "\${DEVICE_UDID}" "\${APP_PATH}"
+
+echo "Launching app (\${BUNDLE_ID}) on device \${DEVICE_UDID}..."
+exec xcrun devicectl device process launch --device "\${DEVICE_UDID}" "\${BUNDLE_ID}"
+EOF
+
+chmod +x "${BIN_DIR}/arcadia" "${BIN_DIR}/arcadia-gui" "${BIN_DIR}/arcadia-ios"
 
 if [[ ":${PATH}:" != *":${BIN_DIR}:"* ]]; then
   echo "Installed commands, but ${BIN_DIR} is not currently on PATH in this shell."
@@ -88,3 +187,4 @@ fi
 echo "Use:"
 echo "  arcadia <args>"
 echo "  arcadia-gui <args>"
+echo "  arcadia-ios"

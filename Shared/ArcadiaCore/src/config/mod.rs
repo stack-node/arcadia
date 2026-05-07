@@ -1,5 +1,6 @@
 pub mod commandline;
 pub mod modules;
+pub mod thin_client;
 
 use std::env;
 use std::fs;

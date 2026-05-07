@@ -1,0 +1,33 @@
+import Foundation
+
+extension ContentView {
+    static func loadNavigationRegistry() -> NavigationRegistry {
+        let fallback = NavigationRegistry(
+            pages: [
+                PageDefinition(id: "utility.shell", title: "Shell", description: "Run and manage shell utility actions.", glyph: "SH", systemImage: "terminal", accent: "emerald", requiredModule: ModuleNames.shell),
+                PageDefinition(id: "global.dashboard", title: "Dashboard", description: "Overview of the Arcadia application surface.", glyph: "DH", systemImage: "house", accent: "violet"),
+                PageDefinition(id: "global.logs", title: "Logs", description: "Recent logs and activity stream appear here.", glyph: "LG", systemImage: "doc.text.magnifyingglass", accent: "sky"),
+                PageDefinition(id: "global.settings", title: "Settings", description: "App preferences and configuration controls appear here.", glyph: "ST", systemImage: "gearshape", accent: "indigo"),
+                PageDefinition(id: "global.modules", title: "Modules", description: "Manage global module availability and dependency requirements.", glyph: "MD", systemImage: "switch.2", accent: "fuchsia"),
+                PageDefinition(id: "network.overview", title: "Overview", description: "Network status and module connectivity overview.", glyph: "NW", systemImage: "network", accent: "teal", requiredModule: ModuleNames.net),
+                PageDefinition(id: "network.nodes", title: "Nodes", description: "Discover LAN peers and manage pairing with lan.scan / lan.node.", glyph: "ND", systemImage: "rectangle.connected.to.line.under.fill", accent: "cyan", requiredModule: ModuleNames.lan)
+            ],
+            groups: [
+                GroupDefinition(id: "utilities", label: "Utilities", glyph: "UT", systemImage: "wrench.and.screwdriver", pageIDs: ["utility.shell"], accent: "amber"),
+                GroupDefinition(id: "network", label: "Network", glyph: "NW", systemImage: "network", pageIDs: ["network.overview", "network.nodes"], accent: "cyan")
+            ],
+            globalPages: ["global.dashboard", "global.settings", "global.modules"],
+            defaultGroup: "utilities",
+            defaultPage: "global.dashboard"
+        )
+
+        let payload = navigationRegistryJson()
+        guard let data = payload.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(NavigationRegistry.self, from: data),
+              !decoded.pages.isEmpty,
+              !decoded.groups.isEmpty else {
+            return fallback
+        }
+        return decoded
+    }
+}

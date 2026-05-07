@@ -1,9 +1,12 @@
 /target
+**/target/
+build/
 **/*.rs.bk
 /Models/
 /Configuration/
-/Desktop/target/
-/Shared/target/
 /Mobile/iOS/.xcode/
 **/xcuserdata/
 .DS_Store
+
+# SwiftPM / local launcher build output (not source)
+Launchers/Development/OSX/.build/
