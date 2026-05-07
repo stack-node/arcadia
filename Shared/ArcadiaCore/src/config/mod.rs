@@ -1,4 +1,5 @@
 pub mod commandline;
+pub mod late;
 pub mod modules;
 pub mod thin_client;
 

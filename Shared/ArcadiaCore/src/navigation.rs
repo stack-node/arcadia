@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::config::modules::{LAN_MODULE_NAME, NET_MODULE_NAME, SHELL_MODULE_NAME};
+use crate::config::modules::{LAN_MODULE_NAME, LATE_MODULE_NAME, NET_MODULE_NAME, SHELL_MODULE_NAME};
 
 #[derive(Clone, Copy, Serialize)]
 pub struct NavigationPageDefinition {
@@ -175,6 +175,15 @@ pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
         accent: "cyan",
         required_module: Some(LAN_MODULE_NAME),
     },
+    NavigationPageDefinition {
+        id: "late.now_playing",
+        title: "Late.sh",
+        description: "Live chat, now playing, votes, visualizer, and bonsai in one view.",
+        glyph: "music",
+        system_image: "music.note",
+        accent: "violet",
+        required_module: Some(LATE_MODULE_NAME),
+    },
 ];
 
 pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
@@ -193,6 +202,14 @@ pub const GROUP_DEFINITIONS: &[NavigationGroupDefinition] = &[
         system_image: "network",
         pages: &["network.overview", "network.nodes"],
         accent: "cyan",
+    },
+    NavigationGroupDefinition {
+        id: "social",
+        label: "Social",
+        glyph: "chat",
+        system_image: "bubble.left.and.bubble.right.fill",
+        pages: &["late.now_playing"],
+        accent: "teal",
     },
 ];
 

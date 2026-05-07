@@ -3,6 +3,7 @@ enum ModuleNames {
     static let shell = "shell"
     static let net = "net"
     static let lan = "lan"
+    static let late = "late"
     static let surface = "surface"
     static let remoteSession = "remote-session"
     static let shellMotd = "shell-motd"

@@ -1,4 +1,5 @@
 pub mod lan;
+pub mod late;
 pub mod net;
 pub mod remote_mirror;
 pub mod remote_session;
@@ -26,6 +27,7 @@ pub struct ModuleCommand {
 fn module_commands(module_name: &str) -> Option<&'static [ModuleCommand]> {
     match module_name {
         lan::NAME => Some(lan::commands()),
+        late::NAME => Some(late::commands()),
         net::NAME => Some(net::commands()),
         remote_session::NAME => Some(remote_session::commands()),
         shell::NAME => Some(shell::commands()),
@@ -196,6 +198,7 @@ pub fn all_command_entries() -> Vec<(String, String)> {
 pub fn load_all() {
     let _known_modules = [
         lan::NAME,
+        late::NAME,
         net::NAME,
         remote_session::NAME,
         shell::NAME,

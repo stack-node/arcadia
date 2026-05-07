@@ -176,6 +176,8 @@ extension ContentView {
             LanNodesView(theme: theme)
         } else if activePage.id == "utility.shell" {
             ShellView(shellHistory: $shellHistory, shellCommandInput: $shellCommandInput, onRun: runShellCommand)
+        } else if activePage.id == "late.now_playing" {
+            LateView(theme: theme)
         } else {
             VStack(spacing: 16) {
                 GlassCard(title: "Primary Surface", subtitle: "This page is rendered from shared page definitions.")

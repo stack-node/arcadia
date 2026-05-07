@@ -1,4 +1,4 @@
-Arcadia Community License (ACL) v1.5
+Arcadia Community License (ACL) v1.6
 Copyright (c) 2026 stackno.de
 
 Preamble
@@ -546,6 +546,84 @@ of the Software:
     The copyright holder considers this clause non-negotiable and will
     pursue violations to the fullest extent available under applicable
     law, without hesitation and without limit.
+
+15. Anti-Lock-in and Data Portability
+
+    Any deployment or distribution of the Software that stores user data,
+    configuration, session history, or other user-generated content must:
+    - provide users with a mechanism to export that content in a portable,
+      documented, machine-readable format, at no charge and without
+      technical barriers;
+    - not use technical, contractual, or legal means to prevent users from
+      migrating their content away from a deployment; and
+    - not impose terms, technical measures, or dependencies that create
+      artificial retention beyond what the user freely chooses.
+
+    This clause does not require exported content to be compatible with
+    any particular third-party system. It requires only that users can
+    retrieve what is theirs in a form they can use.
+
+    Operators may not satisfy this condition through nominal compliance —
+    for example, by providing export in an undocumented, proprietary, or
+    deliberately impractical format.
+
+16. Behavioral Intelligibility
+
+    Versions of the Software distributed to end users must not be
+    obfuscated, encrypted, or otherwise transformed in ways that prevent
+    a technically capable user from determining what the Software does
+    with their system resources, data, and network connections.
+
+    This clause does not prohibit:
+    - compilation to native or bytecode form;
+    - minification of assets for performance;
+    - encryption of data at rest or in transit; or
+    - proprietary extensions, modules, or plugins operating alongside the
+      Software, provided those components do not conceal the Software's
+      own behavior.
+
+    The restriction applies to the Software itself and to any wrapper,
+    loader, or bootstrapper that materially controls the Software's
+    execution. This clause prohibits obfuscation of behavior, not merely
+    obfuscation of representation.
+
+17. End-User Modification Right
+
+    End users of the Software always retain the right to modify, patch,
+    or extend the Software for their own personal, non-distributed use,
+    regardless of any terms imposed by operators, redistributors, or
+    deployers.
+
+    No deployment, distribution agreement, terms of service, or
+    contractual arrangement may restrict a user's ability to run a
+    modified version of the Software on their own systems for their own
+    personal use.
+
+    This clause does not require any operator to support, distribute, or
+    accept modified versions from users. It protects only the right of
+    users to run modifications locally, for themselves.
+
+18. Decision Transparency
+
+    Any deployment that uses the Software to make, inform, or communicate
+    automated decisions that materially affect users — including access
+    controls, content filtering, prioritization, or account actions —
+    must provide those users with:
+    - a meaningful, plain-language explanation of the basis for the
+      decision;
+    - clear disclosure that an automated process was involved; and
+    - a mechanism for the affected user to seek human review, where
+      technically feasible and where the decision is consequential and
+      not easily reversible by the user.
+
+    This clause supplements Condition 8. It does not prohibit automation.
+    It requires that users are not left facing consequential automated
+    decisions they cannot understand, verify, or challenge.
+
+    Operators may not satisfy this clause through generic boilerplate
+    disclosures or explanations so vague as to be meaningless. The
+    explanation must be specific to the decision and sufficient for the
+    affected user to understand why it was made.
 
 Interpretation and Spirit
 

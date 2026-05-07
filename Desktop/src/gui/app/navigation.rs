@@ -173,6 +173,9 @@ impl ArcadiaRoot {
                 .p_6()
                 .child(self.lan_nodes_panel(cx, is_dark));
         }
+        if self.active_page_id.as_str() == "late.now_playing" {
+            return self.render_late_now_playing(window, cx, is_dark);
+        }
         div()
             .w_full()
             .p_6()

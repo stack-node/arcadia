@@ -3,6 +3,8 @@ use gpui::{div, rgb, Context, InteractiveElement, IntoElement, ParentElement, St
 use crate::gui::app::{ArcadiaRoot, ShellMode};
 use crate::gui::theme;
 
+const LATE_ROOMS: &[(&str, u32)] = &[("1", 1), ("2", 2), ("3", 3), ("4", 4), ("5", 5)];
+
 impl ArcadiaRoot {
     pub(crate) fn render_main_top_bar(
         &self,
@@ -44,6 +46,53 @@ impl ArcadiaRoot {
                                     })
                                     .child(active_page_title),
                             )
+                            .child(if self.active_page_id.as_str() == "late.now_playing" {
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .gap_1()
+                                    .children(LATE_ROOMS.iter().map(|(label, room_id)| {
+                                        let rid = *room_id;
+                                        let is_active = rid == self.late_active_room;
+                                        div()
+                                            .cursor_pointer()
+                                            .px_2()
+                                            .py_0p5()
+                                            .rounded_md()
+                                            .text_xs()
+                                            .font_weight(gpui::FontWeight::SEMIBOLD)
+                                            .bg(if is_active {
+                                                if is_dark { rgb(0x0d9488) } else { rgb(0x99f6e4) }
+                                            } else {
+                                                theme::top_bar_pill_bg(is_dark)
+                                            })
+                                            .text_color(if is_active {
+                                                if is_dark { rgb(0xf0fdfa) } else { rgb(0x134e4a) }
+                                            } else {
+                                                theme::top_bar_pill_text(is_dark)
+                                            })
+                                            .hover(move |style| {
+                                                if !is_active {
+                                                    style.bg(theme::top_bar_pill_hover_bg(is_dark))
+                                                } else {
+                                                    style
+                                                }
+                                            })
+                                            .child(*label)
+                                            .on_mouse_down(
+                                                gpui::MouseButton::Left,
+                                                cx.listener(move |this, _, _, cx| {
+                                                    this.late_active_room = rid;
+                                                    arcadia_core::modules::late::send_ws(
+                                                        format!(r#"{{"type":"subscribe","room_id":{rid}}}"#),
+                                                    );
+                                                    cx.notify();
+                                                }),
+                                            )
+                                    }))
+                            } else {
+                                div()
+                            })
                             .child(if self.active_page_id.as_str() == "utility.shell" {
                                 div()
                                     .px_2()

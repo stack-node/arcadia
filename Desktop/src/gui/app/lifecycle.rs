@@ -64,6 +64,7 @@ impl ArcadiaRoot {
 
     pub fn new(cx: &mut gpui::Context<Self>) -> Self {
         let shell_focus = cx.focus_handle();
+        let late_compose_focus = cx.focus_handle();
         let module_rows = ModulesConfig::load_or_create()
             .map(|cfg| cfg.modules.into_iter().collect::<Vec<(String, bool)>>())
             .unwrap_or_default();
@@ -82,6 +83,7 @@ impl ArcadiaRoot {
             shell_history: Self::initial_shell_history(),
             shell_input: String::new(),
             shell_focus,
+            late_compose_focus,
             shell_cursor: 0,
             shell_command_history: Vec::new(),
             shell_history_index: None,
@@ -112,6 +114,10 @@ impl ArcadiaRoot {
             lan_service_feedback: String::new(),
             pending_lan_port_kill_prompt: None,
             lan_poll_task_started: false,
+            late_poll_task_started: false,
+            late_last_revision: 0,
+            late_active_room: 1,
+            late_compose_text: String::new(),
         };
 
         // Thin client bootstrap: ARCADIA_NET_AS overrides persisted thin-client.toml route.

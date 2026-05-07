@@ -5,6 +5,7 @@ use crate::config::ConfigFile;
 
 const LEGACY_LAN_MODULE_NAME: &str = "lan-module";
 pub const LAN_MODULE_NAME: &str = "lan";
+pub const LATE_MODULE_NAME: &str = "late";
 pub const NET_MODULE_NAME: &str = "net";
 pub const SURFACE_MODULE_NAME: &str = "surface";
 pub const REMOTE_SESSION_MODULE_NAME: &str = "remote-session";
@@ -57,6 +58,12 @@ static MODULE_REGISTRY: &[ModuleManifest] = &[
         version: "1.0.0",
         description: "Fastfetch-style banner when opening the Arcadia shell (requires shell).",
         required_modules: &[SHELL_MODULE_NAME],
+    },
+    ModuleManifest {
+        name: LATE_MODULE_NAME,
+        version: "0.1.0",
+        description: "Native late.sh client — chat rooms, music stream, reactions, and bonsai.",
+        required_modules: &[],
     },
 ];
 

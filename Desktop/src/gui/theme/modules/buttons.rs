@@ -18,6 +18,24 @@ pub fn module_button_enable_bg(is_dark: bool) -> Rgba {
     }
 }
 
+pub fn module_button_enable_hover_bg(is_dark: bool) -> Rgba {
+    if is_dark {
+        Rgba {
+            r: 0.145,
+            g: 0.520,
+            b: 0.380,
+            a: 1.0,
+        }
+    } else {
+        Rgba {
+            r: 0.150,
+            g: 0.640,
+            b: 0.470,
+            a: 1.0,
+        }
+    }
+}
+
 pub fn module_button_enable_text(is_dark: bool) -> Rgba {
     if is_dark {
         Rgba {
