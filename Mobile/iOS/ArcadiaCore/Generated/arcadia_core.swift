@@ -399,6 +399,22 @@ fileprivate class UniffiHandleMap<T> {
 #if swift(>=5.8)
 @_documentation(visibility: private)
 #endif
+fileprivate struct FfiConverterUInt16: FfiConverterPrimitive {
+    typealias FfiType = UInt16
+    typealias SwiftType = UInt16
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> UInt16 {
+        return try lift(readInt(&buf))
+    }
+
+    public static func write(_ value: SwiftType, into buf: inout [UInt8]) {
+        writeInt(&buf, lower(value))
+    }
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
 fileprivate struct FfiConverterUInt64: FfiConverterPrimitive {
     typealias FfiType = UInt64
     typealias SwiftType = UInt64
@@ -810,6 +826,88 @@ public func FfiConverterTypeExecutionContextFfi_lower(_ value: ExecutionContextF
 }
 
 
+public struct LanServiceInfoFfi {
+    public var running: Bool
+    public var port: UInt16
+    public var hostname: String
+    public var moduleEnabled: Bool
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(running: Bool, port: UInt16, hostname: String, moduleEnabled: Bool) {
+        self.running = running
+        self.port = port
+        self.hostname = hostname
+        self.moduleEnabled = moduleEnabled
+    }
+}
+
+
+
+extension LanServiceInfoFfi: Equatable, Hashable {
+    public static func ==(lhs: LanServiceInfoFfi, rhs: LanServiceInfoFfi) -> Bool {
+        if lhs.running != rhs.running {
+            return false
+        }
+        if lhs.port != rhs.port {
+            return false
+        }
+        if lhs.hostname != rhs.hostname {
+            return false
+        }
+        if lhs.moduleEnabled != rhs.moduleEnabled {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(running)
+        hasher.combine(port)
+        hasher.combine(hostname)
+        hasher.combine(moduleEnabled)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypeLanServiceInfoFfi: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> LanServiceInfoFfi {
+        return
+            try LanServiceInfoFfi(
+                running: FfiConverterBool.read(from: &buf), 
+                port: FfiConverterUInt16.read(from: &buf), 
+                hostname: FfiConverterString.read(from: &buf), 
+                moduleEnabled: FfiConverterBool.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: LanServiceInfoFfi, into buf: inout [UInt8]) {
+        FfiConverterBool.write(value.running, into: &buf)
+        FfiConverterUInt16.write(value.port, into: &buf)
+        FfiConverterString.write(value.hostname, into: &buf)
+        FfiConverterBool.write(value.moduleEnabled, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanServiceInfoFfi_lift(_ buf: RustBuffer) throws -> LanServiceInfoFfi {
+    return try FfiConverterTypeLanServiceInfoFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypeLanServiceInfoFfi_lower(_ value: LanServiceInfoFfi) -> RustBuffer {
+    return FfiConverterTypeLanServiceInfoFfi.lower(value)
+}
+
+
 public struct ModuleStatus {
     public var name: String
     public var enabled: Bool
@@ -1166,6 +1264,15 @@ public func executeCommand(token: String, args: [String], context: ExecutionCont
 })
 }
 /**
+ * LAN service status: running state, UDP port, hostname, and module-enabled flag.
+ */
+public func lanServiceInfo() -> LanServiceInfoFfi {
+    return try!  FfiConverterTypeLanServiceInfoFfi.lift(try! rustCall() {
+    uniffi_arcadia_core_fn_func_lan_service_info($0
+    )
+})
+}
+/**
  * Start the LAN background service thread. Safe to call multiple times.
  */
 public func lanStart() {try! rustCall() {
@@ -1238,6 +1345,16 @@ public func setConfigRootPath(path: String) {try! rustCall() {
 }
 }
 /**
+ * Override the hostname this node advertises over LAN. Call early, before `lan_start`.
+ * iOS should pass `ProcessInfo.processInfo.hostName`; desktop resolves hostname automatically.
+ */
+public func setLocalHostname(name: String) {try! rustCall() {
+    uniffi_arcadia_core_fn_func_set_local_hostname(
+        FfiConverterString.lower(name),$0
+    )
+}
+}
+/**
  * Enable or disable a named module. Persists to disk. Returns status message.
  */
 public func setModuleEnabled(name: String, enabled: Bool) -> String {
@@ -1303,6 +1420,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_arcadia_core_checksum_func_execute_command() != 44678) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_arcadia_core_checksum_func_lan_service_info() != 17447) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_arcadia_core_checksum_func_lan_start() != 58023) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -1325,6 +1445,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_arcadia_core_checksum_func_set_config_root_path() != 404) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_arcadia_core_checksum_func_set_local_hostname() != 12539) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_arcadia_core_checksum_func_set_module_enabled() != 41009) {

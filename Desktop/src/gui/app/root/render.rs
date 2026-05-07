@@ -16,6 +16,7 @@ impl Render for ArcadiaRoot {
         }
         self.sync_peer_remote_exec_side_effects(window, cx);
         self.ensure_shell_caret_task(window, cx);
+        self.ensure_lan_poll_task(window, cx);
         if self.tui_session.is_some() {
             self.sync_tui_size(window);
         }
@@ -109,5 +110,6 @@ impl Render for ArcadiaRoot {
                     }),
             )
             .child(self.requirements_modal(cx, is_dark))
+            .child(self.kill_existing_lan_modal(cx, is_dark))
     }
 }

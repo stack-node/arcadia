@@ -22,7 +22,7 @@ use protocol::{
     RECV_BUF_LARGE,
 };
 
-pub use discovery::{discover_lan_peers, start_service, stop_service};
+pub use discovery::{discover_lan_peers, set_hostname_override, start_service, stop_service};
 
 pub struct LanServiceInfo {
     pub running: bool,

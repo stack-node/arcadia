@@ -75,6 +75,10 @@ pub fn is_auto_allowed(ip: &str, hostname: &str) -> bool {
     let Ok(cfg) = load_node_config() else {
         return false;
     };
+    // Previously approved nodes always auto-accept — trust was already established.
+    if is_identifier_approved(&cfg, ip, hostname) {
+        return true;
+    }
     if !cfg.auto {
         return false;
     }

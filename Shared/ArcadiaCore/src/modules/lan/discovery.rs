@@ -21,6 +21,11 @@ use super::protocol::{
 
 pub static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVICE_THREAD: OnceLock<Mutex<Option<JoinHandle<()>>>> = OnceLock::new();
+static HOSTNAME_OVERRIDE: OnceLock<String> = OnceLock::new();
+
+pub fn set_hostname_override(name: String) {
+    let _ = HOSTNAME_OVERRIDE.set(name);
+}
 
 fn service_thread_slot() -> &'static Mutex<Option<JoinHandle<()>>> {
     SERVICE_THREAD.get_or_init(|| Mutex::new(None))
@@ -34,6 +39,9 @@ pub fn lan_enabled() -> bool {
 }
 
 pub fn local_hostname() -> String {
+    if let Some(name) = HOSTNAME_OVERRIDE.get() {
+        return name.clone();
+    }
     env::var("HOSTNAME")
         .or_else(|_| env::var("COMPUTERNAME"))
         .unwrap_or_else(|_| {
@@ -201,26 +209,26 @@ pub fn service_status(_args: &[&str], _context: &ExecutionContext) -> String {
     )
 }
 
-pub fn start_service() {
-    if SERVICE_RUNNING.swap(true, Ordering::SeqCst) {
-        return;
+pub fn start_service() -> Result<(), String> {
+    if SERVICE_RUNNING.load(Ordering::SeqCst) {
+        return Ok(());
     }
 
-    let mut slot = match service_thread_slot().lock() {
-        Ok(guard) => guard,
-        Err(_) => {
-            SERVICE_RUNNING.store(false, Ordering::SeqCst);
-            return;
-        }
-    };
+    let mut slot = service_thread_slot()
+        .lock()
+        .map_err(|_| "Failed to acquire LAN service lock".to_string())?;
+    if SERVICE_RUNNING.load(Ordering::SeqCst) {
+        return Ok(());
+    }
 
-    let handle = thread::spawn(|| {
-        let Ok(socket) = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DISCOVERY_PORT))
-        else {
-            SERVICE_RUNNING.store(false, Ordering::SeqCst);
-            return;
-        };
-        let _ = socket.set_read_timeout(Some(Duration::from_millis(200)));
+    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, DISCOVERY_PORT))
+        .map_err(|err| format!("Failed to bind UDP socket on port {DISCOVERY_PORT}: {err}"))?;
+    socket
+        .set_read_timeout(Some(Duration::from_millis(200)))
+        .map_err(|err| format!("Failed to configure LAN service socket: {err}"))?;
+    SERVICE_RUNNING.store(true, Ordering::SeqCst);
+
+    let handle = thread::spawn(move || {
 
         let mut buf = [0_u8; RECV_BUF_SMALL];
         while SERVICE_RUNNING.load(Ordering::SeqCst) {
@@ -314,6 +322,23 @@ pub fn start_service() {
         }
     });
     *slot = Some(handle);
+
+    // Reconnect to previously approved nodes in the background.
+    thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let Ok(cfg) = super::config::load_node_config() else { return; };
+        if cfg.approved_nodes.is_empty() { return; }
+        let Ok(sock) = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)) else { return; };
+        let payload = format!("{NODE_CONNECT_PREFIX}\t{}", local_hostname());
+        for ip_str in &cfg.approved_nodes {
+            let key = super::config::normalize_node_identifier(ip_str);
+            if let Ok(ip) = key.parse::<std::net::Ipv4Addr>() {
+                let _ = sock.send_to(payload.as_bytes(), SocketAddrV4::new(ip, DISCOVERY_PORT));
+            }
+        }
+    });
+
+    Ok(())
 }
 
 pub fn stop_service() {

@@ -132,6 +132,7 @@ impl ArcadiaRoot {
                                                 .on_mouse_down(
                                                     gpui::MouseButton::Left,
                                                     cx.listener(|this, _, _, cx| {
+                                                        cx.stop_propagation();
                                                         this.session_route_menu_open =
                                                             !this.session_route_menu_open;
                                                         this.app_menu_open = false;

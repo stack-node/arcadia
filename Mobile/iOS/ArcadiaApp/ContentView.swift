@@ -102,7 +102,10 @@ struct ContentView: View {
             }
         }
         .onChange(of: isSidebarOpen) { open in
-            if open { dismissKeyboard() }
+            if open {
+                dismissKeyboard()
+                refreshRemoteTargets()
+            }
         }
         .alert("Enable with requirements?", isPresented: $showRequirementsPrompt, presenting: pendingModuleEnable) { pending in
             Button("Cancel", role: .cancel) { pendingModuleEnable = nil }

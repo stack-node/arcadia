@@ -11,6 +11,7 @@ struct ArcadiaApp: App {
             try? fm.createDirectory(at: configRoot, withIntermediateDirectories: true)
             setConfigRootPath(path: configRoot.path)
         }
+        setLocalHostname(name: ProcessInfo.processInfo.hostName)
     }
 
     var body: some Scene {

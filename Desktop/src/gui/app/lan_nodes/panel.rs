@@ -89,6 +89,10 @@ impl ArcadiaRoot {
         div()
             .flex()
             .gap_2()
+            .child(self.lan_primary_button(cx, "Refresh", is_dark, |this, cx| {
+                this.lan_command_feedback = "LAN nodes status refreshed.".to_string();
+                cx.notify();
+            }))
             .child(self.lan_primary_button(cx, "Scan", is_dark, |this, cx| {
                 match discover_lan_peers(None) {
                     Ok(peers) => {
@@ -237,6 +241,7 @@ impl ArcadiaRoot {
             }
             "pending-outbound" => {
                 let ip_c = ip.clone();
+                let ip_a = ip.clone();
                 let ip_r = ip.clone();
                 div()
                     .flex()
@@ -244,6 +249,12 @@ impl ArcadiaRoot {
                     .child(
                         self.lan_small_button(cx, "Connect", is_dark, ip_c, |this, ip, cx| {
                             this.lan_execute_feedback("lan.node", vec!["connect".into(), ip]);
+                            cx.notify();
+                        }),
+                    )
+                    .child(
+                        self.lan_small_button(cx, "Accept", is_dark, ip_a, |this, ip, cx| {
+                            this.lan_execute_feedback("lan.node", vec!["accept".into(), ip]);
                             cx.notify();
                         }),
                     )

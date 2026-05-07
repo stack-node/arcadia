@@ -208,7 +208,9 @@ pub fn load_all() {
     }
 
     // Service binds port regardless; respects lan_enabled() per-request.
-    lan::start_service();
+    if let Err(err) = lan::start_service() {
+        eprintln!("Failed to start LAN service: {err}");
+    }
 }
 
 pub fn shutdown_all() {

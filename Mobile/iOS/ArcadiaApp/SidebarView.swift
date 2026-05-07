@@ -50,47 +50,41 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .center, spacing: 10) {
-                    Text("Arcadia")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                        .foregroundStyle(theme.primaryTextColor)
+            HStack(alignment: .center, spacing: 10) {
+                Text("Arcadia")
+                    .font(.system(size: 28, weight: .semibold, design: .rounded))
+                    .foregroundStyle(theme.primaryTextColor)
 
-                    if remoteSessionEnabled {
-                        Menu {
-                            Button("Local") {
-                                remoteRoute = nil
+                if remoteSessionEnabled {
+                    Menu {
+                        Button("Local") {
+                            remoteRoute = nil
+                            refreshRemoteTargets()
+                        }
+                        ForEach(remoteTargets) { target in
+                            Button("\(target.hostname) (\(target.ip))") {
+                                remoteRoute = "lan:\(target.ip)"
                                 refreshRemoteTargets()
                             }
-                            ForEach(remoteTargets) { target in
-                                Button("\(target.hostname) (\(target.ip))") {
-                                    remoteRoute = "lan:\(target.ip)"
-                                    refreshRemoteTargets()
-                                }
-                            }
-                        } label: {
-                            HStack(spacing: 4) {
-                                Text(sessionChipTitle)
-                                Image(systemName: "chevron.down")
-                                    .font(.system(size: 7, weight: .bold))
-                            }
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(theme.secondaryTextColor)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(theme.cardFillColor, in: Capsule())
-                            .overlay {
-                                Capsule()
-                                    .stroke(theme.cardStrokeColor, lineWidth: 1)
-                            }
                         }
-                        .onAppear { refreshRemoteTargets() }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(sessionChipTitle)
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 7, weight: .bold))
+                        }
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(theme.secondaryTextColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(theme.cardFillColor, in: Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke(theme.cardStrokeColor, lineWidth: 1)
+                        }
                     }
+                    .onAppear { refreshRemoteTargets() }
                 }
-
-                Text("Liquid glass")
-                    .font(.subheadline)
-                    .foregroundStyle(theme.secondaryTextColor)
             }
             .padding(.horizontal, 22)
             .padding(.top, 28)

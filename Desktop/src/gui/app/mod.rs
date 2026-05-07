@@ -108,6 +108,9 @@ pub struct ArcadiaRoot {
     pub last_surface_revision: Option<u64>,
     pub lan_discovered_peers: Vec<(String, String)>,
     pub lan_command_feedback: String,
+    pub lan_service_feedback: String,
+    pub pending_lan_port_kill_prompt: Option<String>,
+    pub lan_poll_task_started: bool,
 }
 
 impl ArcadiaRoot {

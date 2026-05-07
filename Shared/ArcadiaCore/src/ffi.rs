@@ -209,10 +209,17 @@ pub fn thin_client_preferred_route_set(route: Option<String>) -> String {
     }
 }
 
+/// Override the hostname this node advertises over LAN. Call early, before `lan_start`.
+/// iOS should pass `ProcessInfo.processInfo.hostName`; desktop resolves hostname automatically.
+#[uniffi::export]
+pub fn set_local_hostname(name: String) {
+    crate::modules::lan::set_hostname_override(name);
+}
+
 /// Start the LAN background service thread. Safe to call multiple times.
 #[uniffi::export]
 pub fn lan_start() {
-    crate::modules::lan::start_service();
+    let _ = crate::modules::lan::start_service();
 }
 
 /// Stop the LAN background service thread.

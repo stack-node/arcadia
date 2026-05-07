@@ -143,6 +143,7 @@ struct LanNodesView: View {
                     Button("Reject") { runLanNode(["reject", row.ip]) }.buttonStyle(.bordered)
                 case "pending-outbound":
                     Button("Connect") { runLanNode(["connect", row.ip]) }.buttonStyle(.bordered)
+                    Button("Accept") { runLanNode(["accept", row.ip]) }.buttonStyle(.bordered)
                     Button("Reject") { runLanNode(["reject", row.ip]) }.buttonStyle(.bordered)
                 case "connected":
                     Button("Save") { runLanNode(["save", row.ip]) }.buttonStyle(.bordered)
@@ -221,6 +222,7 @@ struct LanNodesView: View {
             else { continue }
             let ip = String(rest[..<open]).trimmingCharacters(in: .whitespaces)
             let hostname = String(rest[rest.index(after: open)..<close]).trimmingCharacters(in: .whitespaces)
+            guard ip.range(of: #"^\d{1,3}(\.\d{1,3}){3}$"#, options: .regularExpression) != nil else { continue }
             if !ip.isEmpty {
                 rows.append(DiscoveredPeerRow(id: ip, hostname: hostname.isEmpty ? ip : hostname))
             }

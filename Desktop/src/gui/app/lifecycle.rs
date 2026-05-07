@@ -9,8 +9,8 @@ use arcadia_core::config::modules::{
 use arcadia_core::config::thin_client::ThinClientConfig;
 use arcadia_core::config::ConfigFile;
 use arcadia_core::modules;
-use arcadia_core::modules::surface::parse_surface_snapshot;
 use arcadia_core::modules::shell_motd;
+use arcadia_core::modules::surface::parse_surface_snapshot;
 use arcadia_core::navigation;
 use gpui::{Context, Timer, Window};
 
@@ -109,6 +109,9 @@ impl ArcadiaRoot {
             last_surface_revision: None,
             lan_discovered_peers: Vec::new(),
             lan_command_feedback: String::new(),
+            lan_service_feedback: String::new(),
+            pending_lan_port_kill_prompt: None,
+            lan_poll_task_started: false,
         };
 
         // Thin client bootstrap: ARCADIA_NET_AS overrides persisted thin-client.toml route.
@@ -162,6 +165,44 @@ impl ArcadiaRoot {
                 .unwrap_or_default();
         }
         self.ensure_valid_navigation_selection();
+    }
+
+    pub fn ensure_lan_poll_task(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.lan_poll_task_started {
+            return;
+        }
+        if self.active_page_id != "network.nodes" {
+            return;
+        }
+        self.lan_poll_task_started = true;
+        cx.spawn_in(
+            window,
+            move |view: gpui::WeakEntity<ArcadiaRoot>, cx: &mut gpui::AsyncWindowContext| {
+                let mut cx = cx.clone();
+                async move {
+                    loop {
+                        Timer::after(Duration::from_secs(1)).await;
+                        let should_stop = cx
+                            .update(|_, app| {
+                                view.update(app, |this, cx| {
+                                    if this.active_page_id != "network.nodes" {
+                                        this.lan_poll_task_started = false;
+                                        return true;
+                                    }
+                                    cx.notify();
+                                    false
+                                })
+                                .unwrap_or(true)
+                            })
+                            .unwrap_or(true);
+                        if should_stop {
+                            break;
+                        }
+                    }
+                }
+            },
+        )
+        .detach();
     }
 
     pub fn ensure_shell_caret_task(&mut self, window: &mut Window, cx: &mut Context<Self>) {

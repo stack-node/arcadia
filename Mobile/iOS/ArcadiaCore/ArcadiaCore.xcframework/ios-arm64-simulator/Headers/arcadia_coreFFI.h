@@ -313,6 +313,12 @@ RustBuffer uniffi_arcadia_core_fn_func_drain_remote_mirror_batch(RustCallStatus 
 RustBuffer uniffi_arcadia_core_fn_func_execute_command(RustBuffer token, RustBuffer args, RustBuffer context, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_LAN_SERVICE_INFO
+#define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_LAN_SERVICE_INFO
+RustBuffer uniffi_arcadia_core_fn_func_lan_service_info(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_LAN_START
 #define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_LAN_START
 void uniffi_arcadia_core_fn_func_lan_start(RustCallStatus *_Nonnull out_status
@@ -357,6 +363,11 @@ RustBuffer uniffi_arcadia_core_fn_func_probe_module_toggle(RustBuffer name, int8
 #ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_SET_CONFIG_ROOT_PATH
 #define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_SET_CONFIG_ROOT_PATH
 void uniffi_arcadia_core_fn_func_set_config_root_path(RustBuffer path, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_SET_LOCAL_HOSTNAME
+#define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_SET_LOCAL_HOSTNAME
+void uniffi_arcadia_core_fn_func_set_local_hostname(RustBuffer name, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_FN_FUNC_SET_MODULE_ENABLED
@@ -678,6 +689,12 @@ uint16_t uniffi_arcadia_core_checksum_func_execute_command(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_LAN_SERVICE_INFO
+#define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_LAN_SERVICE_INFO
+uint16_t uniffi_arcadia_core_checksum_func_lan_service_info(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_LAN_START
 #define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_LAN_START
 uint16_t uniffi_arcadia_core_checksum_func_lan_start(void
@@ -723,6 +740,12 @@ uint16_t uniffi_arcadia_core_checksum_func_probe_module_toggle(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_SET_CONFIG_ROOT_PATH
 #define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_SET_CONFIG_ROOT_PATH
 uint16_t uniffi_arcadia_core_checksum_func_set_config_root_path(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_SET_LOCAL_HOSTNAME
+#define UNIFFI_FFIDEF_UNIFFI_ARCADIA_CORE_CHECKSUM_FUNC_SET_LOCAL_HOSTNAME
+uint16_t uniffi_arcadia_core_checksum_func_set_local_hostname(void
     
 );
 #endif
