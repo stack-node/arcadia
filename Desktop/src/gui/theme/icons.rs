@@ -1,6 +1,6 @@
 use gpui::{svg, Svg};
 
-pub fn icon_path(glyph_key: &'static str) -> &'static str {
+pub fn icon_path(glyph_key: &str) -> &'static str {
     match glyph_key {
         "terminal" => "icons/terminal.svg",
         "home" => "icons/home.svg",
@@ -13,6 +13,6 @@ pub fn icon_path(glyph_key: &'static str) -> &'static str {
     }
 }
 
-pub fn render_icon(glyph_key: &'static str) -> Svg {
+pub fn render_icon(glyph_key: &str) -> Svg {
     svg().path(icon_path(glyph_key))
 }

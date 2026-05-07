@@ -1256,6 +1256,31 @@ public func setModuleEnabledWithRequirements(name: String, enabled: Bool) -> Str
     )
 })
 }
+public func thinClientPreferredRouteGet() -> String? {
+    return try!  FfiConverterOptionString.lift(try! rustCall() {
+    uniffi_arcadia_core_fn_func_thin_client_preferred_route_get($0
+    )
+})
+}
+/**
+ * Persist default `net_as` route; empty error string on success.
+ */
+public func thinClientPreferredRouteSet(route: String?) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_arcadia_core_fn_func_thin_client_preferred_route_set(
+        FfiConverterOptionString.lower(route),$0
+    )
+})
+}
+/**
+ * Stable id for this GUI peer (`surface.patch` client_id, logs).
+ */
+public func thinClientSurfaceClientId() -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_arcadia_core_fn_func_thin_client_surface_client_id($0
+    )
+})
+}
 
 private enum InitializationResult {
     case ok
@@ -1306,6 +1331,15 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_arcadia_core_checksum_func_set_module_enabled_with_requirements() != 7308) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_arcadia_core_checksum_func_thin_client_preferred_route_get() != 53888) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_arcadia_core_checksum_func_thin_client_preferred_route_set() != 41361) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_arcadia_core_checksum_func_thin_client_surface_client_id() != 59315) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_arcadia_core_checksum_method_modulemanager_execute() != 51257) {

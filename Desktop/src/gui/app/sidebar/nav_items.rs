@@ -1,4 +1,3 @@
-use arcadia_core::navigation;
 use gpui::{div, rgb, Context, InteractiveElement, IntoElement, ParentElement, Styled};
 
 use crate::gui::app::ArcadiaRoot;
@@ -7,7 +6,7 @@ use crate::gui::theme::{self, render_icon};
 impl ArcadiaRoot {
     pub fn sidebar_toggle_button(
         cx: &mut Context<Self>,
-        page_glyph: &'static str,
+        page_glyph: &str,
         is_dark: bool,
     ) -> impl IntoElement {
         div()
@@ -51,14 +50,14 @@ impl ArcadiaRoot {
 
     pub fn sidebar_group_item(
         cx: &mut Context<Self>,
-        label: &'static str,
-        system_image: &'static str,
-        group_id: &'static str,
+        label: gpui::SharedString,
+        system_image: gpui::SharedString,
+        group_id: String,
         is_active: bool,
         is_dark: bool,
-        accent: &'static str,
+        accent: String,
     ) -> impl IntoElement {
-        let pal = theme::nav_accent_palette(accent, is_dark);
+        let pal = theme::nav_accent_palette(accent.as_str(), is_dark);
         let icon_color = if is_active {
             pal.icon_active
         } else {
@@ -108,19 +107,22 @@ impl ArcadiaRoot {
                     .justify_center()
                     .gap_1()
                     .text_center()
-                    .child(render_icon(system_image).size_5().text_color(icon_color))
+                    .child(
+                        render_icon(system_image.as_ref()).size_5().text_color(icon_color),
+                    )
                     .child(div().child(label)),
             )
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    this.active_group_id = group_id;
-                    if let Some(group) = navigation::GROUP_DEFINITIONS
-                        .iter()
-                        .find(|group| group.id == group_id)
-                    {
-                        if let Some(first_page_id) = group.pages.first() {
-                            this.active_page_id = first_page_id;
+                    this.active_group_id = group_id.clone();
+                    if let Some(group) = this.effective_group(group_id.as_str()) {
+                        if let Some(first_page_id) = group
+                            .page_ids()
+                            .into_iter()
+                            .find(|pid| this.is_page_visible(pid))
+                        {
+                            this.active_page_id = first_page_id.to_string();
                         }
                     }
                     cx.notify();
@@ -132,14 +134,14 @@ impl ArcadiaRoot {
     /// the sidebar still uses [`Self::sidebar_global_item`].
     pub fn top_bar_global_item(
         cx: &mut Context<Self>,
-        label: &'static str,
-        system_image: &'static str,
-        page_id: &'static str,
+        label: gpui::SharedString,
+        system_image: gpui::SharedString,
+        page_id: String,
         is_active: bool,
         is_dark: bool,
-        accent: &'static str,
+        accent: String,
     ) -> impl IntoElement {
-        let pal = theme::nav_accent_palette(accent, is_dark);
+        let pal = theme::nav_accent_palette(accent.as_str(), is_dark);
         let icon_color = if is_active {
             pal.icon_active
         } else {
@@ -179,13 +181,13 @@ impl ArcadiaRoot {
                     .flex()
                     .gap_1()
                     .items_center()
-                    .child(render_icon(system_image).size_4().text_color(icon_color))
+                    .child(render_icon(system_image.as_ref()).size_4().text_color(icon_color))
                     .child(div().child(label)),
             )
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    this.active_page_id = page_id;
+                    this.active_page_id = page_id.clone();
                     if page_id == "global.modules" {
                         this.reload_modules();
                     }
@@ -196,14 +198,14 @@ impl ArcadiaRoot {
 
     pub fn sidebar_global_item(
         cx: &mut Context<Self>,
-        label: &'static str,
-        system_image: &'static str,
-        page_id: &'static str,
+        label: gpui::SharedString,
+        system_image: gpui::SharedString,
+        page_id: String,
         is_active: bool,
         is_dark: bool,
-        accent: &'static str,
+        accent: String,
     ) -> impl IntoElement {
-        let pal = theme::nav_accent_palette(accent, is_dark);
+        let pal = theme::nav_accent_palette(accent.as_str(), is_dark);
         let icon_color = if is_active {
             pal.icon_active
         } else {
@@ -247,13 +249,13 @@ impl ArcadiaRoot {
                     .flex()
                     .gap_2()
                     .items_center()
-                    .child(render_icon(system_image).size_4().text_color(icon_color))
+                    .child(render_icon(system_image.as_ref()).size_4().text_color(icon_color))
                     .child(div().child(label)),
             )
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    this.active_page_id = page_id;
+                    this.active_page_id = page_id.clone();
                     if page_id == "global.modules" {
                         this.reload_modules();
                     }
@@ -264,14 +266,14 @@ impl ArcadiaRoot {
 
     pub fn sidebar_item(
         cx: &mut Context<Self>,
-        label: &'static str,
-        system_image: &'static str,
-        page_id: &'static str,
+        label: gpui::SharedString,
+        system_image: gpui::SharedString,
+        page_id: String,
         is_active: bool,
         is_dark: bool,
-        accent: &'static str,
+        accent: String,
     ) -> impl IntoElement {
-        let pal = theme::nav_accent_palette(accent, is_dark);
+        let pal = theme::nav_accent_palette(accent.as_str(), is_dark);
         let icon_color = if is_active {
             pal.icon_active
         } else {
@@ -315,13 +317,13 @@ impl ArcadiaRoot {
                     .flex()
                     .gap_2()
                     .items_center()
-                    .child(render_icon(system_image).size_4().text_color(icon_color))
+                    .child(render_icon(system_image.as_ref()).size_4().text_color(icon_color))
                     .child(div().child(label)),
             )
             .on_mouse_down(
                 gpui::MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
-                    this.active_page_id = page_id;
+                    this.active_page_id = page_id.clone();
                     cx.notify();
                 }),
             )

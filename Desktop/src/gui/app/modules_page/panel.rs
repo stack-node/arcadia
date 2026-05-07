@@ -7,7 +7,7 @@ use crate::gui::theme;
 
 impl ArcadiaRoot {
     pub fn modules_panel(&self, cx: &mut Context<Self>, is_dark: bool) -> impl IntoElement {
-        if self.active_page_id != "global.modules" {
+        if self.active_page_id.as_str() != "global.modules" {
             return div();
         }
         div()

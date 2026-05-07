@@ -1,6 +1,6 @@
 import Foundation
 
-struct PageDefinition: Identifiable, Decodable {
+struct PageDefinition: Identifiable, Codable {
     let id: String
     let title: String
     let description: String
@@ -39,7 +39,7 @@ struct PageDefinition: Identifiable, Decodable {
     }
 }
 
-struct GroupDefinition: Identifiable, Decodable {
+struct GroupDefinition: Identifiable, Codable {
     let id: String
     let label: String
     let glyph: String
@@ -57,7 +57,7 @@ struct GroupDefinition: Identifiable, Decodable {
     }
 }
 
-struct NavigationRegistry: Decodable {
+struct NavigationRegistry: Codable {
     let pages: [PageDefinition]
     let groups: [GroupDefinition]
     let globalPages: [String]

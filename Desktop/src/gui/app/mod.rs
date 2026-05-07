@@ -14,6 +14,7 @@ mod splash;
 
 pub use entry::run;
 
+use arcadia_core::navigation::NavigationRegistryOwned;
 use gpui::{FocusHandle, ScrollHandle, SharedString};
 
 use super::tui::TuiSession;
@@ -67,8 +68,8 @@ impl ShellMode {
 
 pub struct ArcadiaRoot {
     pub title: SharedString,
-    pub active_page_id: &'static str,
-    pub active_group_id: &'static str,
+    pub active_page_id: String,
+    pub active_group_id: String,
     pub module_rows: Vec<(String, bool)>,
     pub pending_module_enable: Option<(String, Vec<String>)>,
     pub shell_history: Vec<String>,
@@ -100,6 +101,10 @@ pub struct ArcadiaRoot {
     pub session_route_menu_open: bool,
     /// When `Some("lan:<ip-or-alias>")`, module visibility and routed commands use this peer.
     pub remote_route: Option<String>,
+    /// Host navigation JSON from `surface.snapshot` when connected remotely (multi-client shared truth).
+    pub remote_nav: Option<NavigationRegistryOwned>,
+    pub surface_client_id: String,
+    pub last_surface_revision: Option<u64>,
     pub lan_discovered_peers: Vec<(String, String)>,
     pub lan_command_feedback: String,
 }

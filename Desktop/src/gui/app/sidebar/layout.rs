@@ -1,11 +1,12 @@
 use arcadia_core::config::modules::REMOTE_SESSION_MODULE_NAME;
+use arcadia_core::config::thin_client::ThinClientConfig;
 use arcadia_core::modules::lan::connected_approved_session_peers;
-use arcadia_core::navigation;
 use gpui::{
     div, img, px, rgb, Context, Div, InteractiveElement, ParentElement, StatefulInteractiveElement,
     Styled, Window,
 };
 
+use crate::gui::app::navigation::NavGroupRef;
 use crate::gui::app::{window_controls_top_padding, ArcadiaRoot};
 use crate::gui::theme::{self};
 
@@ -14,8 +15,8 @@ impl ArcadiaRoot {
         &self,
         window: &Window,
         cx: &mut Context<Self>,
-        visible_groups: &[&'static navigation::NavigationGroupDefinition],
-        active_group: &'static navigation::NavigationGroupDefinition,
+        visible_groups: &[NavGroupRef<'_>],
+        active_group: &NavGroupRef<'_>,
         is_dark: bool,
     ) -> Div {
         let top_inset = window_controls_top_padding(window);
@@ -181,6 +182,7 @@ impl ArcadiaRoot {
                                                         .on_mouse_down(
                                                             gpui::MouseButton::Left,
                                                             cx.listener(|this, _, _, cx| {
+                                                                let _ = ThinClientConfig::set_preferred_remote_route(None);
                                                                 this.remote_route = None;
                                                                 this.session_route_menu_open = false;
                                                                 this.reload_modules();
@@ -215,6 +217,7 @@ impl ArcadiaRoot {
                                                             .on_mouse_down(
                                                                 gpui::MouseButton::Left,
                                                                 cx.listener(move |this, _, _, cx| {
+                                                                    let _ = ThinClientConfig::set_preferred_remote_route(Some(&route));
                                                                     this.remote_route =
                                                                         Some(route.clone());
                                                                     this.session_route_menu_open =
@@ -294,15 +297,15 @@ impl ArcadiaRoot {
                                     .w_full()
                                     .justify_center()
                                     .items_start()
-                                    .children(visible_groups.iter().map(|group| {
+                                    .children(visible_groups.iter().copied().map(|group| {
                                         Self::sidebar_group_item(
                                             cx,
-                                            group.label,
-                                            group.glyph,
-                                            group.id,
-                                            self.active_group_id == group.id,
+                                            gpui::SharedString::from(group.label().to_string()),
+                                            gpui::SharedString::from(group.system_image().to_string()),
+                                            group.id().to_string(),
+                                            self.active_group_id == group.id(),
                                             is_dark,
-                                            group.accent,
+                                            group.accent().to_string(),
                                         )
                                     })),
                             ),
@@ -313,36 +316,34 @@ impl ArcadiaRoot {
                             .flex_1()
                             .overflow_y_scroll()
                             .child(div().flex().flex_col().gap_1().children(
-                                active_group.pages.iter().filter_map(|page_id| {
+                                active_group.page_ids().into_iter().filter_map(|page_id| {
                                     if !self.is_page_visible(page_id) {
                                         return None;
                                     }
-                                    Self::page_by_id(*page_id).map(|page| {
-                                        Self::sidebar_item(
-                                            cx,
-                                            page.title,
-                                            page.glyph,
-                                            page.id,
-                                            self.active_page_id == page.id,
-                                            is_dark,
-                                            page.accent,
-                                        )
-                                    })
+                                    let page = self.page_ref(page_id)?;
+                                    Some(Self::sidebar_item(
+                                        cx,
+                                        gpui::SharedString::from(page.title().to_string()),
+                                        gpui::SharedString::from(page.glyph().to_string()),
+                                        page.id().to_string(),
+                                        self.active_page_id == page.id(),
+                                        is_dark,
+                                        page.accent().to_string(),
+                                    ))
                                 }),
                             )),
                     )
-                    .children(navigation::GLOBAL_PAGE_IDS.iter().filter_map(|page_id| {
-                        Self::page_by_id(*page_id).map(|page| {
-                            Self::sidebar_global_item(
-                                cx,
-                                page.title,
-                                page.glyph,
-                                page.id,
-                                self.active_page_id == page.id,
-                                is_dark,
-                                page.accent,
-                            )
-                        })
+                    .children(self.global_page_ids_effective().into_iter().filter_map(|page_id| {
+                        let page = self.page_ref(page_id)?;
+                        Some(Self::sidebar_global_item(
+                            cx,
+                            gpui::SharedString::from(page.title().to_string()),
+                            gpui::SharedString::from(page.glyph().to_string()),
+                            page.id().to_string(),
+                            self.active_page_id == page.id(),
+                            is_dark,
+                            page.accent().to_string(),
+                        ))
                     })),
             )
     }

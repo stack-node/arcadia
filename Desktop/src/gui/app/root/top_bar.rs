@@ -1,4 +1,3 @@
-use arcadia_core::navigation;
 use gpui::{div, rgb, Context, InteractiveElement, IntoElement, ParentElement, Styled};
 
 use crate::gui::app::{ArcadiaRoot, ShellMode};
@@ -8,8 +7,8 @@ impl ArcadiaRoot {
     pub(crate) fn render_main_top_bar(
         &self,
         cx: &mut Context<Self>,
-        active_page_title: &'static str,
-        active_page_glyph: &'static str,
+        active_page_title: gpui::SharedString,
+        active_page_glyph: gpui::SharedString,
         is_dark: bool,
     ) -> impl IntoElement {
         div()
@@ -33,7 +32,7 @@ impl ArcadiaRoot {
                             .flex()
                             .items_center()
                             .gap_3()
-                            .child(Self::sidebar_toggle_button(cx, active_page_glyph, is_dark))
+                            .child(Self::sidebar_toggle_button(cx, active_page_glyph.as_ref(), is_dark))
                             .child(
                                 div()
                                     .text_sm()
@@ -45,7 +44,7 @@ impl ArcadiaRoot {
                                     })
                                     .child(active_page_title),
                             )
-                            .child(if self.active_page_id == "utility.shell" {
+                            .child(if self.active_page_id.as_str() == "utility.shell" {
                                 div()
                                     .px_2()
                                     .py_0p5()
@@ -82,7 +81,7 @@ impl ArcadiaRoot {
                                 div()
                             })
                             .child(
-                                if self.active_page_id == "utility.shell"
+                                if self.active_page_id.as_str() == "utility.shell"
                                     && self.shell_mode == ShellMode::Generic
                                 {
                                     div()
@@ -97,7 +96,7 @@ impl ArcadiaRoot {
                                     div().hidden()
                                 },
                             )
-                            .child(if self.active_page_id == "utility.shell" {
+                            .child(if self.active_page_id.as_str() == "utility.shell" {
                                 div()
                                     .px_2()
                                     .py_0p5()
@@ -120,7 +119,7 @@ impl ArcadiaRoot {
                             } else {
                                 div()
                             })
-                            .child(if self.active_page_id == "utility.shell" {
+                            .child(if self.active_page_id.as_str() == "utility.shell" {
                                 div()
                                     .px_2()
                                     .py_0p5()
@@ -147,14 +146,14 @@ impl ArcadiaRoot {
                     )
                     .child(Self::top_bar_global_item(
                         cx,
-                        "Logs",
-                        "logs",
-                        "global.logs",
-                        self.active_page_id == "global.logs",
+                        "Logs".into(),
+                        "logs".into(),
+                        "global.logs".into(),
+                        self.active_page_id.as_str() == "global.logs",
                         is_dark,
-                        navigation::page_by_id("global.logs")
-                            .map(|p| p.accent)
-                            .unwrap_or("sky"),
+                        self.page_ref("global.logs")
+                            .map(|p| p.accent().to_string())
+                            .unwrap_or_else(|| "sky".to_string()),
                     )),
             )
     }

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import UIKit
 
@@ -7,23 +8,68 @@ struct RemoteTarget: Codable, Identifiable {
     var id: String { ip }
 }
 
-private struct SurfaceSnapshot: Codable {
+private struct SurfacePayload: Codable {
     let modules: [String: Bool]
+    let revision: UInt64?
+    let extra: SurfaceExtra?
+}
+
+private struct SurfaceExtra: Codable {
+    let navigationRegistry: NavigationRegistry?
+
+    enum CodingKeys: String, CodingKey {
+        case navigationRegistry = "navigation_registry"
+    }
 }
 
 private struct SurfaceModulesSetPatch: Codable {
     let op: String
     let name: String
     let enabled: Bool
+    let clientId: String?
 
-    init(name: String, enabled: Bool) {
+    enum CodingKeys: String, CodingKey {
+        case op, name, enabled
+        case clientId = "client_id"
+    }
+
+    init(name: String, enabled: Bool, clientId: String?) {
         self.op = "modules_set"
         self.name = name
         self.enabled = enabled
+        self.clientId = clientId
     }
 }
 
 extension ContentView {
+    /// ARCADIA_NET_AS env beats thin-client.toml; shape matches ExecutionContext.net_as (`lan:host`).
+    func applyThinClientBootstrapRoute() {
+        let env = ProcessInfo.processInfo.environment["ARCADIA_NET_AS"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let persisted = thinClientPreferredRouteGet()?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw: String?
+        if let e = env, !e.isEmpty { raw = e }
+        else if let p = persisted, !p.isEmpty { raw = p }
+        else { raw = nil }
+        guard let r = raw,
+              isModuleEnabled(ModuleNames.lan),
+              isModuleEnabled(ModuleNames.remoteSession) else { return }
+        let route = r.hasPrefix("lan:") ? r : "lan:\(r)"
+        remoteRoute = route
+    }
+
+    func ensureActiveNavigationSelection() {
+        let pageIds = Set(navigationRegistry.pages.map(\.id))
+        let groupIds = Set(navigationRegistry.groups.map(\.id))
+        if !groupIds.contains(activeGroupID) {
+            activeGroupID = navigationRegistry.defaultGroup
+        }
+        if !pageIds.contains(activePageID) {
+            activePageID = navigationRegistry.defaultPage
+        }
+    }
+
     func reloadModules() {
         if let route = remoteRoute {
             let json = executeCommand(
@@ -32,14 +78,20 @@ extension ContentView {
                 context: ExecutionContextFfi(netAs: route, netTimeoutMs: nil)
             )
             guard let data = json.data(using: .utf8),
-                  let snap = try? JSONDecoder().decode(SurfaceSnapshot.self, from: data) else {
+                  let payload = try? JSONDecoder().decode(SurfacePayload.self, from: data) else {
                 modules = []
                 return
             }
-            modules = snap.modules.map { ModuleStatus(name: $0.key, enabled: $0.value) }
+            modules = payload.modules.map { ModuleStatus(name: $0.key, enabled: $0.value) }
                 .sorted { $0.name < $1.name }
+            if let nav = payload.extra?.navigationRegistry, !nav.pages.isEmpty, !nav.groups.isEmpty {
+                navigationRegistry = nav
+            }
+            ensureActiveNavigationSelection()
         } else {
             modules = listModules().sorted { $0.name < $1.name }
+            navigationRegistry = Self.loadNavigationRegistry()
+            ensureActiveNavigationSelection()
         }
     }
 
@@ -67,7 +119,11 @@ extension ContentView {
             do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
             if let route = remoteRoute {
                 guard let payloadData = try? JSONEncoder().encode([
-                    SurfaceModulesSetPatch(name: name, enabled: enabled),
+                    SurfaceModulesSetPatch(
+                        name: name,
+                        enabled: enabled,
+                        clientId: thinClientSurfaceClientId()
+                    ),
                 ]),
                       let payload = String(data: payloadData, encoding: .utf8) else {
                     moduleErrorMessage = "Could not encode surface.patch payload"

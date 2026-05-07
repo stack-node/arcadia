@@ -156,6 +156,7 @@ impl ArcadiaRoot {
                                     arcadia_core::modules::surface::patch_json_modules_set(
                                         &name,
                                         enabled_next,
+                                        Some(this.surface_client_id.as_str()),
                                     );
                                 match modules::execute_command("surface.patch", &[payload.as_str()], &ctx)
                                 {

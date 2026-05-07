@@ -9,7 +9,7 @@ struct ContentView: View {
     let sidebarWidth: CGFloat = 292
     let sidebarSwipeThreshold: CGFloat = 80
 
-    let registry: NavigationRegistry
+    @State private var navigationRegistry: NavigationRegistry
 
     @State var showSplash = true
     @State var isSidebarOpen = true
@@ -28,7 +28,7 @@ struct ContentView: View {
 
     init() {
         let loadedRegistry = Self.loadNavigationRegistry()
-        self.registry = loadedRegistry
+        _navigationRegistry = State(initialValue: loadedRegistry)
         _activeGroupID = State(initialValue: loadedRegistry.defaultGroup)
         _activePageID = State(initialValue: loadedRegistry.defaultPage)
     }
@@ -55,7 +55,7 @@ struct ContentView: View {
                 }
 
             SidebarView(
-                registry: registry,
+                registry: navigationRegistry,
                 sidebarWidth: sidebarWidth,
                 sidebarSwipeThreshold: sidebarSwipeThreshold,
                 isPageVisible: { pageID in self.isPageVisible(pageID) },
@@ -87,14 +87,19 @@ struct ContentView: View {
             }
         }
         .onAppear {
+            applyThinClientBootstrapRoute()
             refreshRemoteTargets()
             reloadModules()
         }
         .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
             applyRemoteMirrorSideEffects()
         }
-        .onChange(of: remoteRoute) { _, _ in
+        .onChange(of: remoteRoute) { _, newVal in
             reloadModules()
+            let err = thinClientPreferredRouteSet(route: newVal)
+            if !err.isEmpty {
+                moduleErrorMessage = err
+            }
         }
         .onChange(of: isSidebarOpen) { open in
             if open { dismissKeyboard() }

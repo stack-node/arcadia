@@ -6,9 +6,10 @@ use arcadia_core::config::modules::{
     ModulesConfig, LAN_MODULE_NAME, REMOTE_SESSION_MODULE_NAME, SHELL_MODULE_NAME,
     SHELL_MOTD_MODULE_NAME,
 };
-use arcadia_core::modules;
-use arcadia_core::modules::surface::snapshot_module_rows;
+use arcadia_core::config::thin_client::ThinClientConfig;
 use arcadia_core::config::ConfigFile;
+use arcadia_core::modules;
+use arcadia_core::modules::surface::parse_surface_snapshot;
 use arcadia_core::modules::shell_motd;
 use arcadia_core::navigation;
 use gpui::{Context, Timer, Window};
@@ -74,8 +75,8 @@ impl ArcadiaRoot {
             .unwrap_or_else(|_| "cwd: unavailable".to_string());
         let mut root = ArcadiaRoot {
             title: gpui::SharedString::new_static("Arcadia"),
-            active_page_id: navigation::DEFAULT_PAGE_ID,
-            active_group_id: navigation::DEFAULT_GROUP_ID,
+            active_page_id: navigation::DEFAULT_PAGE_ID.to_string(),
+            active_group_id: navigation::DEFAULT_GROUP_ID.to_string(),
             module_rows,
             pending_module_enable: None,
             shell_history: Self::initial_shell_history(),
@@ -103,18 +104,30 @@ impl ArcadiaRoot {
             app_menu_open: false,
             session_route_menu_open: false,
             remote_route: None,
+            remote_nav: None,
+            surface_client_id: ThinClientConfig::load_surface_client_id(),
+            last_surface_revision: None,
             lan_discovered_peers: Vec::new(),
             lan_command_feedback: String::new(),
         };
 
-        // Thin client bootstrap: same shape as ExecutionContext.net_as (e.g. lan:192.168.1.10).
+        // Thin client bootstrap: ARCADIA_NET_AS overrides persisted thin-client.toml route.
+        let mut picked_route: Option<String> = None;
         if let Ok(route) = env::var("ARCADIA_NET_AS") {
             let trimmed = route.trim();
-            if !trimmed.is_empty()
-                && root.is_module_enabled(LAN_MODULE_NAME)
+            if !trimmed.is_empty() {
+                picked_route = Some(trimmed.to_string());
+            }
+        } else if let Ok(tc) = ThinClientConfig::load_or_create() {
+            if let Some(pref) = tc.preferred_remote_route.filter(|s| !s.trim().is_empty()) {
+                picked_route = Some(pref.trim().to_string());
+            }
+        }
+        if let Some(route) = picked_route {
+            if root.is_module_enabled(LAN_MODULE_NAME)
                 && root.is_module_enabled(REMOTE_SESSION_MODULE_NAME)
             {
-                root.remote_route = Some(trimmed.to_string());
+                root.remote_route = Some(route);
                 root.reload_modules();
             }
         }
@@ -123,20 +136,31 @@ impl ArcadiaRoot {
     }
 
     pub fn reload_modules(&mut self) {
-        self.module_rows = if let Some(ref route) = self.remote_route {
+        if let Some(ref route) = self.remote_route {
             let ctx = modules::ExecutionContext {
                 net_as: Some(route.clone()),
                 net_timeout_ms: None,
             };
             match modules::execute_command("surface.snapshot", &[], &ctx) {
-                Ok(Some(json)) => snapshot_module_rows(&json),
-                _ => Vec::new(),
+                Ok(Some(json)) => {
+                    let parsed = parse_surface_snapshot(&json);
+                    self.module_rows = parsed.modules;
+                    self.remote_nav = parsed.navigation_registry;
+                    self.last_surface_revision = Some(parsed.revision);
+                }
+                _ => {
+                    self.module_rows = Vec::new();
+                    self.remote_nav = None;
+                    self.last_surface_revision = None;
+                }
             }
         } else {
-            ModulesConfig::load_or_create()
+            self.remote_nav = None;
+            self.last_surface_revision = None;
+            self.module_rows = ModulesConfig::load_or_create()
                 .map(|cfg| cfg.modules.into_iter().collect())
-                .unwrap_or_default()
-        };
+                .unwrap_or_default();
+        }
         self.ensure_valid_navigation_selection();
     }
 

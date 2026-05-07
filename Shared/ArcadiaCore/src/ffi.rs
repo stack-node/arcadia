@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::config::modules::ModulesConfig;
+use crate::config::thin_client::ThinClientConfig;
 use crate::config::ConfigFile;
 use crate::modules;
 
@@ -184,6 +185,28 @@ pub fn platform_name() -> String {
 #[uniffi::export]
 pub fn navigation_registry_json() -> String {
     crate::navigation::default_navigation_registry_json()
+}
+
+/// Stable id for this GUI peer (`surface.patch` client_id, logs).
+#[uniffi::export]
+pub fn thin_client_surface_client_id() -> String {
+    ThinClientConfig::load_surface_client_id()
+}
+
+#[uniffi::export]
+pub fn thin_client_preferred_route_get() -> Option<String> {
+    ThinClientConfig::load_or_create()
+        .ok()
+        .and_then(|c| c.preferred_remote_route.clone())
+}
+
+/// Persist default `net_as` route; empty error string on success.
+#[uniffi::export]
+pub fn thin_client_preferred_route_set(route: Option<String>) -> String {
+    match ThinClientConfig::set_preferred_remote_route(route.as_deref()) {
+        Ok(()) => String::new(),
+        Err(e) => format!("Error saving thin-client preferences: {e}"),
+    }
 }
 
 /// Start the LAN background service thread. Safe to call multiple times.

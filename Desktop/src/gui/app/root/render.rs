@@ -4,6 +4,7 @@ use gpui::{
     StatefulInteractiveElement, Styled, Window, WindowAppearance,
 };
 
+use crate::gui::app::navigation::NavGroupRef;
 use crate::gui::app::splash::SPLASH_TOTAL_MS;
 use crate::gui::app::{window_controls_top_padding, ArcadiaRoot};
 
@@ -22,18 +23,29 @@ impl Render for ArcadiaRoot {
             window.appearance(),
             WindowAppearance::Dark | WindowAppearance::VibrantDark
         );
-        let visible_groups = self.visible_groups();
-        let active_page = self
-            .active_page_if_visible()
-            .or_else(|| Self::page_by_id(navigation::DEFAULT_PAGE_ID));
+        let visible_groups = self.visible_groups_effective();
+        let fallback_group = NavGroupRef::Static(
+            navigation::group_by_id(navigation::DEFAULT_GROUP_ID)
+                .unwrap_or(&navigation::GROUP_DEFINITIONS[0]),
+        );
         let active_group = visible_groups
             .iter()
-            .copied()
-            .find(|group| group.id == self.active_group_id)
-            .or_else(|| visible_groups.first().copied())
-            .unwrap_or(Self::group_by_id(navigation::DEFAULT_GROUP_ID));
-        let active_page_title = active_page.map(|page| page.title).unwrap_or("Arcadia");
-        let active_page_glyph = active_page.map(|page| page.glyph).unwrap_or("tools");
+            .find(|g| g.id() == self.active_group_id.as_str())
+            .or_else(|| visible_groups.first())
+            .unwrap_or(&fallback_group);
+        let active_page = self
+            .active_page_if_visible()
+            .or_else(|| self.page_ref(self.effective_default_page()));
+        let active_page_title = gpui::SharedString::from(
+            active_page
+                .map(|page| page.title().to_string())
+                .unwrap_or_else(|| "Arcadia".to_string()),
+        );
+        let active_page_glyph = gpui::SharedString::from(
+            active_page
+                .map(|page| page.glyph().to_string())
+                .unwrap_or_else(|| "tools".to_string()),
+        );
 
         div()
             .size_full()
@@ -80,7 +92,7 @@ impl Render for ArcadiaRoot {
                         active_page_glyph,
                         is_dark,
                     ))
-                    .child(if self.active_page_id == "utility.shell" {
+                    .child(if self.active_page_id.as_str() == "utility.shell" {
                         div()
                             .flex_1()
                             .min_h_0()

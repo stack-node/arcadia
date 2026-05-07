@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::modules::{LAN_MODULE_NAME, NET_MODULE_NAME, SHELL_MODULE_NAME};
 
@@ -33,6 +33,82 @@ pub struct NavigationRegistry {
     pub global_pages: Vec<&'static str>,
     pub default_group: &'static str,
     pub default_page: &'static str,
+}
+
+/// Navigation mirrors sent over `surface.snapshot.extra.navigation_registry` (thin clients, mixed versions).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NavigationPageOwned {
+    pub id: String,
+    pub title: String,
+    pub description: String,
+    pub glyph: String,
+    #[serde(rename = "system_image")]
+    pub system_image: String,
+    pub accent: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_module: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NavigationGroupOwned {
+    pub id: String,
+    pub label: String,
+    pub glyph: String,
+    #[serde(rename = "system_image")]
+    pub system_image: String,
+    pub pages: Vec<String>,
+    pub accent: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct NavigationRegistryOwned {
+    pub pages: Vec<NavigationPageOwned>,
+    pub groups: Vec<NavigationGroupOwned>,
+    #[serde(rename = "global_pages")]
+    pub global_pages: Vec<String>,
+    #[serde(rename = "default_group")]
+    pub default_group: String,
+    #[serde(rename = "default_page")]
+    pub default_page: String,
+}
+
+impl NavigationRegistryOwned {
+    pub fn from_static_registry() -> Self {
+        Self {
+            pages: PAGE_DEFINITIONS.iter().map(|p| p.into()).collect(),
+            groups: GROUP_DEFINITIONS.iter().map(|g| g.into()).collect(),
+            global_pages: GLOBAL_PAGE_IDS.iter().map(|s| (*s).to_string()).collect(),
+            default_group: DEFAULT_GROUP_ID.to_string(),
+            default_page: DEFAULT_PAGE_ID.to_string(),
+        }
+    }
+}
+
+impl From<&NavigationPageDefinition> for NavigationPageOwned {
+    fn from(p: &NavigationPageDefinition) -> Self {
+        NavigationPageOwned {
+            id: p.id.to_string(),
+            title: p.title.to_string(),
+            description: p.description.to_string(),
+            glyph: p.glyph.to_string(),
+            system_image: p.system_image.to_string(),
+            accent: p.accent.to_string(),
+            required_module: p.required_module.map(|s| s.to_string()),
+        }
+    }
+}
+
+impl From<&NavigationGroupDefinition> for NavigationGroupOwned {
+    fn from(g: &NavigationGroupDefinition) -> Self {
+        NavigationGroupOwned {
+            id: g.id.to_string(),
+            label: g.label.to_string(),
+            glyph: g.glyph.to_string(),
+            system_image: g.system_image.to_string(),
+            pages: g.pages.iter().map(|s| (*s).to_string()).collect(),
+            accent: g.accent.to_string(),
+        }
+    }
 }
 
 pub const PAGE_DEFINITIONS: &[NavigationPageDefinition] = &[
@@ -143,6 +219,6 @@ pub fn default_navigation_registry() -> NavigationRegistry {
 }
 
 pub fn default_navigation_registry_json() -> String {
-    serde_json::to_string(&default_navigation_registry())
+    serde_json::to_string(&NavigationRegistryOwned::from_static_registry())
         .expect("navigation registry serialization should always succeed")
 }

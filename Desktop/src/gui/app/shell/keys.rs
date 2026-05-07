@@ -11,7 +11,7 @@ impl ArcadiaRoot {
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.active_page_id != "utility.shell" {
+        if self.active_page_id.as_str() != "utility.shell" {
             return;
         }
         let key = event.keystroke.key.as_str();
@@ -124,7 +124,7 @@ impl ArcadiaRoot {
             cx.notify();
             return;
         }
-        if self.active_page_id != "utility.shell" {
+        if self.active_page_id.as_str() != "utility.shell" {
             return;
         }
         let key = event.keystroke.key.as_str();

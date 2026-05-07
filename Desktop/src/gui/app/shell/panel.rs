@@ -15,7 +15,7 @@ impl ArcadiaRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
-        if self.active_page_id != "utility.shell" {
+        if self.active_page_id.as_str() != "utility.shell" {
             return div();
         }
         let is_focused = self.shell_focus.is_focused(window);
