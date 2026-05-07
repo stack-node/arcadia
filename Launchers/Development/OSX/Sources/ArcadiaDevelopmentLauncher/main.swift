@@ -3,6 +3,8 @@ import Foundation
 
 @main
 final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuDelegate {
+    private static let menuRefreshInterval: TimeInterval = 1.5
+
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let repositoryRoot = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Arcadia")
     private let processQueue = DispatchQueue(label: "arcadia.development-launcher.process")
@@ -26,24 +28,54 @@ final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuD
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureStatusItem()
         refreshMenuState()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
-            self?.refreshMenuState()
-        }
+        scheduleMenuRefreshTimer()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        refreshTimer?.invalidate()
-        stopArcadia(wait: false)
+        invalidateMenuRefreshTimer()
+        let snapshot = launchedProcess
+        if let snapshot, snapshot.isRunning {
+            snapshot.terminate()
+            waitForSnapshotToExit(snapshot, timeout: 4)
+        }
+        launchedProcess = nil
+        processQueue.sync { [weak self] in
+            guard let self else { return }
+            for pid in self.arcadiaPIDs() {
+                Darwin.kill(pid, SIGTERM)
+            }
+        }
     }
 
     @objc private func startArcadia() {
-        guard !isArcadiaRunning() else {
+        if launchedProcess?.isRunning == true {
+            refreshMenuState()
+            return
+        }
+
+        processQueue.async { [weak self] in
+            guard let self else { return }
+            guard self.arcadiaPIDs().isEmpty else {
+                DispatchQueue.main.async { self.refreshMenuState() }
+                return
+            }
+            DispatchQueue.main.async { [weak self] in
+                self?.launchArcadiaProcessIfStillNeeded()
+            }
+        }
+    }
+
+    /// Main thread — worker already confirmed no matching `arcadia` PIDs.
+    private func launchArcadiaProcessIfStillNeeded() {
+        if launchedProcess?.isRunning == true {
             refreshMenuState()
             return
         }
 
         let process = makeArcadiaProcess()
+        let logHandle = attachLogFile(to: process)
         process.terminationHandler = { [weak self, weak process] _ in
+            logHandle?.closeFile()
             DispatchQueue.main.async {
                 if self?.launchedProcess === process {
                     self?.launchedProcess = nil
@@ -56,6 +88,7 @@ final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuD
             try process.run()
             launchedProcess = process
         } catch {
+            logHandle?.closeFile()
             showLaunchError(error)
         }
 
@@ -63,29 +96,60 @@ final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuD
     }
 
     @objc private func restartArcadia() {
-        guard isArcadiaRunning() else {
-            refreshMenuState()
+        if launchedProcess?.isRunning == true {
+            stopArcadia(wait: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.startArcadia()
+            }
             return
         }
 
-        stopArcadia(wait: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            self?.startArcadia()
+        processQueue.async { [weak self] in
+            guard let self else { return }
+            guard !self.arcadiaPIDs().isEmpty else {
+                DispatchQueue.main.async { self.refreshMenuState() }
+                return
+            }
+            DispatchQueue.main.async {
+                self.stopArcadia(wait: true)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    self.startArcadia()
+                }
+            }
         }
     }
 
     @objc private func stopArcadiaFromMenu() {
         stopArcadia(wait: false)
-        refreshMenuState()
     }
 
     @objc private func quitLauncher() {
-        stopArcadia(wait: true)
-        NSApp.terminate(nil)
+        invalidateMenuRefreshTimer()
+        let snapshot = launchedProcess
+        launchedProcess = nil
+        snapshot?.terminate()
+
+        processQueue.async { [weak self] in
+            guard let self else {
+                DispatchQueue.main.async { NSApp.terminate(nil) }
+                return
+            }
+            for pid in self.arcadiaPIDs() {
+                Darwin.kill(pid, SIGTERM)
+            }
+            DispatchQueue.main.async {
+                NSApp.terminate(nil)
+            }
+        }
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        invalidateMenuRefreshTimer()
         refreshMenuState()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        scheduleMenuRefreshTimer()
     }
 
     private func configureStatusItem() {
@@ -114,17 +178,79 @@ final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuD
         statusItem.menu = statusMenu
     }
 
-    private func statusIcon() -> NSImage {
-        let bundledImage = Bundle.main.url(forResource: "StatusIcon", withExtension: "png")
-            .flatMap { NSImage(contentsOf: $0) }
-        let image = bundledImage ?? NSApp.applicationIconImage.copy() as? NSImage ?? NSImage()
-        image.size = NSSize(width: 18, height: 18)
-        image.isTemplate = false
-        return image
+    private func scheduleMenuRefreshTimer() {
+        invalidateMenuRefreshTimer()
+        let timer = Timer(timeInterval: Self.menuRefreshInterval, repeats: true) { [weak self] _ in
+            self?.refreshMenuState()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        refreshTimer = timer
     }
 
+    private func invalidateMenuRefreshTimer() {
+        refreshTimer?.invalidate()
+        refreshTimer = nil
+    }
+
+    private func statusIcon() -> NSImage {
+        let side: CGFloat = 18
+        if let url = Bundle.main.url(forResource: "StatusIcon", withExtension: "png"),
+           let source = NSImage(contentsOf: url) {
+            let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { bounds in
+                source.draw(
+                    in: bounds,
+                    from: NSRect(origin: .zero, size: source.size),
+                    operation: .copy,
+                    fraction: 1.0
+                )
+                return true
+            }
+            image.isTemplate = false
+            return image
+        }
+
+        if let symbol = NSImage(systemSymbolName: "hammer.fill", accessibilityDescription: "Arcadia Launcher") {
+            let sized = symbol.withSymbolConfiguration(
+                NSImage.SymbolConfiguration(pointSize: side - 2, weight: .regular)
+            ) ?? symbol
+            sized.isTemplate = true
+            return sized
+        }
+
+        if let appIcon = NSApp.applicationIconImage.copy() as? NSImage {
+            appIcon.size = NSSize(width: side, height: side)
+            appIcon.isTemplate = false
+            return appIcon
+        }
+
+        return minimalMenuBarPlaceholderIcon(side: side)
+    }
+
+    private func minimalMenuBarPlaceholderIcon(side: CGFloat) -> NSImage {
+        NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.controlAccentColor.setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 4, dy: 4)).fill()
+            return true
+        }
+    }
+
+    /// Menu updates only — never runs subprocesses on the main thread.
     private func refreshMenuState() {
-        let running = isArcadiaRunning()
+        if let process = launchedProcess, process.isRunning {
+            applyMenuState(running: true)
+            return
+        }
+
+        processQueue.async { [weak self] in
+            guard let self else { return }
+            let running = !self.arcadiaPIDs().isEmpty
+            DispatchQueue.main.async {
+                self.applyMenuState(running: running)
+            }
+        }
+    }
+
+    private func applyMenuState(running: Bool) {
         startItem?.isEnabled = !running
         restartItem?.isEnabled = running
         stopItem?.isEnabled = running
@@ -154,7 +280,6 @@ final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuD
 
         process.currentDirectoryURL = repositoryRoot
         process.environment = processEnvironment()
-        attachLogFile(to: process)
         return process
     }
 
@@ -166,7 +291,8 @@ final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuD
         return environment
     }
 
-    private func attachLogFile(to process: Process) {
+    /// Redirect stdout/stderr to log file. Close in `terminationHandler` (or immediately if `run()` fails); do **not** close right after `run()` — breaks child I/O.
+    private func attachLogFile(to process: Process) -> FileHandle? {
         let logsDirectory = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Logs/Arcadia")
         let logFile = logsDirectory.appendingPathComponent("DevelopmentLauncher.log")
@@ -183,45 +309,54 @@ final class ArcadiaDevelopmentLauncher: NSObject, NSApplicationDelegate, NSMenuD
             try handle.seekToEnd()
             process.standardOutput = handle
             process.standardError = handle
+            return handle
         } catch {
             process.standardOutput = FileHandle.standardOutput
             process.standardError = FileHandle.standardError
+            return nil
         }
-    }
-
-    private func isArcadiaRunning() -> Bool {
-        if let process = launchedProcess, process.isRunning {
-            return true
-        }
-        return !arcadiaPIDs().isEmpty
     }
 
     private func stopArcadia(wait: Bool) {
-        let localProcess = launchedProcess
+        let snapshot = launchedProcess
+        processQueue.async { [weak self] in
+            self?.stopArcadiaWorkEntry(snapshotProcess: snapshot, wait: wait, refreshUI: true)
+        }
+    }
+
+    /// Runs only on `processQueue`. Never call from main without dispatching.
+    private func stopArcadiaWorkEntry(snapshotProcess: Process?, wait: Bool, refreshUI: Bool) {
         let pids = arcadiaPIDs()
-
-        processQueue.async {
-            if let localProcess, localProcess.isRunning {
-                localProcess.terminate()
-                if wait {
-                    localProcess.waitUntilExit()
-                }
-            }
-
-            for pid in pids {
-                Darwin.kill(pid, SIGTERM)
-            }
-
+        if let snapshotProcess, snapshotProcess.isRunning {
+            snapshotProcess.terminate()
             if wait {
-                self.waitForArcadiaToExit(timeout: 5.0)
+                waitForSnapshotToExit(snapshotProcess, timeout: 12)
             }
+        }
 
-            DispatchQueue.main.async {
+        for pid in pids {
+            Darwin.kill(pid, SIGTERM)
+        }
+
+        if wait {
+            waitForArcadiaToExit(timeout: 5.0)
+        }
+
+        if refreshUI {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
                 if self.launchedProcess?.isRunning == false {
                     self.launchedProcess = nil
                 }
                 self.refreshMenuState()
             }
+        }
+    }
+
+    private func waitForSnapshotToExit(_ process: Process, timeout: TimeInterval) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
         }
     }
 

@@ -65,6 +65,11 @@ impl ArcadiaRoot {
         let icon_color = if is_active {
             pal.icon_active
         } else {
+            pal.icon_idle
+        };
+        let label_color = if is_active {
+            pal.icon_active
+        } else {
             theme::sidebar_nav_idle_foreground(is_dark)
         };
         div()
@@ -88,7 +93,7 @@ impl ArcadiaRoot {
             } else {
                 rgb(0xf6f7fb)
             })
-            .text_color(icon_color)
+            .text_color(label_color)
             .hover(move |style| {
                 style.bg(if is_active {
                     pal.row_hover
@@ -141,6 +146,11 @@ impl ArcadiaRoot {
         let icon_color = if is_active {
             pal.icon_active
         } else {
+            pal.icon_idle
+        };
+        let label_color = if is_active {
+            pal.icon_active
+        } else {
             theme::sidebar_nav_idle_foreground(is_dark)
         };
         div()
@@ -159,7 +169,7 @@ impl ArcadiaRoot {
             } else {
                 theme::top_bar_pill_bg(is_dark)
             })
-            .text_color(icon_color)
+            .text_color(label_color)
             .hover(move |style| {
                 style.bg(if is_active {
                     pal.row_hover
@@ -200,6 +210,11 @@ impl ArcadiaRoot {
         let icon_color = if is_active {
             pal.icon_active
         } else {
+            pal.icon_idle
+        };
+        let label_color = if is_active {
+            pal.icon_active
+        } else {
             theme::sidebar_nav_idle_foreground(is_dark)
         };
         div()
@@ -220,7 +235,7 @@ impl ArcadiaRoot {
             } else {
                 rgb(0xf6f7fb)
             })
-            .text_color(icon_color)
+            .text_color(label_color)
             .hover(move |style| {
                 style.bg(if is_active {
                     pal.row_hover
@@ -263,6 +278,11 @@ impl ArcadiaRoot {
         let icon_color = if is_active {
             pal.icon_active
         } else {
+            pal.icon_idle
+        };
+        let label_color = if is_active {
+            pal.icon_active
+        } else {
             theme::sidebar_nav_idle_foreground(is_dark)
         };
         div()
@@ -283,7 +303,7 @@ impl ArcadiaRoot {
             } else {
                 rgb(0xf6f7fb)
             })
-            .text_color(icon_color)
+            .text_color(label_color)
             .hover(move |style| {
                 style.bg(if is_active {
                     pal.row_hover

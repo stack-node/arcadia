@@ -33,6 +33,8 @@ impl ArcadiaRoot {
             if let (Some(bytes), Some(session)) = (bytes, self.tui_session.as_mut()) {
                 session.write_input(&bytes);
             }
+            self.tui_scroll.scroll_to_bottom();
+            cx.notify();
             return;
         }
 

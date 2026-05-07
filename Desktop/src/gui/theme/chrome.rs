@@ -37,7 +37,7 @@ pub fn top_bar_pill_text(is_dark: bool) -> Rgba {
     }
 }
 
-/// Non-selected sidebar / top-bar nav labels and icons (neutral, not accent-tinted).
+/// Non-selected sidebar / top-bar nav labels (neutral). Icons use `NavAccentPalette::icon_idle`.
 #[inline]
 pub fn sidebar_nav_idle_foreground(is_dark: bool) -> Rgba {
     top_bar_pill_text(is_dark)

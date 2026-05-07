@@ -60,7 +60,7 @@ pub fn vt_color(color: vt100::Color, is_fg: bool, is_dark: bool) -> Rgba {
     }
 }
 
-fn ansi_indexed(idx: u8) -> Rgba {
+pub(crate) fn ansi_indexed(idx: u8) -> Rgba {
     let (r, g, b): (u8, u8, u8) = match idx {
         0 => (0x1c, 0x1c, 0x1c),
         1 => (0xcc, 0x00, 0x00),

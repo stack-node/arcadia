@@ -1,10 +1,14 @@
 use gpui::Rgba;
 use gpui::{
-    div, rgb, Context, Div, FontWeight, InteractiveElement, ParentElement, Styled,
+    div, px, rgb, Context, Div, FontWeight, InteractiveElement, ParentElement,
+    StatefulInteractiveElement, Styled,
 };
 
 use super::super::super::tui::{self};
 use super::super::ArcadiaRoot;
+
+/// Pixel row height; must stay aligned with `shell/execute.rs` `CHAR_H` (PTY rows × this ≈ panel).
+const TUI_ROW_HEIGHT: gpui::Pixels = px(18.);
 
 impl ArcadiaRoot {
     pub(crate) fn render_tui_screen(&self, is_dark: bool, cx: &mut Context<Self>) -> Div {
@@ -88,23 +92,24 @@ impl ArcadiaRoot {
                             .child(text)
                     })
                     .collect();
-                div().flex().flex_row().children(spans)
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_start()
+                    .h(TUI_ROW_HEIGHT)
+                    .children(spans)
             })
             .collect();
 
         div()
             .w_full()
             .h_full()
-            .overflow_hidden()
-            .rounded_lg()
             .bg(term_bg)
-            .p_1()
-            .border_1()
-            .border_color(if is_dark {
-                rgb(0x2f3948)
-            } else {
-                rgb(0xe2e8f0)
-            })
+            .px_2()
+            .pt_2()
+            .pb_2()
+            .flex()
+            .flex_col()
             .track_focus(&self.shell_focus)
             .on_mouse_down(
                 gpui::MouseButton::Left,
@@ -113,8 +118,21 @@ impl ArcadiaRoot {
                 }),
             )
             .on_key_down(cx.listener(Self::handle_shell_key_down))
-            .flex()
-            .flex_col()
-            .children(row_els)
+            .child(
+                div()
+                    .flex_1()
+                    .min_h_0()
+                    .w_full()
+                    .id("arcadia-tui-scroll")
+                    .overflow_y_scroll()
+                    .track_scroll(&self.tui_scroll)
+                    .child(
+                        div()
+                            .w_full()
+                            .flex()
+                            .flex_col()
+                            .children(row_els),
+                    ),
+            )
     }
 }

@@ -9,7 +9,9 @@
   <key>CFBundleIconFile</key>
   <string>Launcher.icns</string>
   <key>CFBundleName</key>
-  <string>Launcher</string>
+  <string>Arcadia Launcher</string>
+  <key>CFBundleDisplayName</key>
+  <string>Arcadia Launcher</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

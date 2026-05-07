@@ -5,6 +5,8 @@ use gpui::{
     Styled, Window, WindowAppearance,
 };
 
+use crate::gui::tui::shell_history_line;
+
 use super::super::ArcadiaRoot;
 
 impl ArcadiaRoot {
@@ -22,8 +24,34 @@ impl ArcadiaRoot {
             WindowAppearance::Dark | WindowAppearance::VibrantDark
         );
 
+        // Live PTY: vt100 grid fills the panel (transcript returns after the process exits).
         if self.tui_session.is_some() && self.tui_ready {
-            return self.render_tui_screen(is_dark, cx);
+            return div()
+                .w_full()
+                .h_full()
+                .overflow_hidden()
+                .p_1()
+                .rounded_lg()
+                .bg(if is_dark {
+                    rgb(0x151a22)
+                } else {
+                    rgb(0xf8fafc)
+                })
+                .border_1()
+                .border_color(if is_dark {
+                    rgb(0x2f3948)
+                } else {
+                    rgb(0xe2e8f0)
+                })
+                .flex()
+                .flex_col()
+                .child(
+                    div()
+                        .flex_1()
+                        .min_h_0()
+                        .w_full()
+                        .child(self.render_tui_screen(is_dark, cx)),
+                );
         }
 
         div()
@@ -54,17 +82,11 @@ impl ArcadiaRoot {
                     .id("arcadia-shell-output")
                     .overflow_y_scroll()
                     .track_scroll(&self.shell_output_scroll)
-                    .child(div().w_full().p_3().flex().flex_col().gap_2().children(
-                        self.shell_history.iter().map(|line| {
-                            div()
-                                .text_sm()
-                                .text_color(if is_dark {
-                                    rgb(0xe5e7eb)
-                                } else {
-                                    rgb(0x1f2937)
-                                })
-                                .child(line.clone())
-                        }),
+                    .child(div().w_full().p_3().flex().flex_col().gap_0().children(
+                        self.shell_history
+                            .iter()
+                            .filter(|line| !line.is_empty())
+                            .map(|line| shell_history_line(line, is_dark)),
                     )),
             )
             .child(
@@ -137,9 +159,13 @@ impl ArcadiaRoot {
     }
 
     pub(crate) fn shell_working_directory_label(&self) -> String {
-        env::current_dir()
-            .ok()
-            .and_then(|path| path.to_str().map(ToOwned::to_owned))
-            .unwrap_or_else(|| "cwd: unavailable".to_string())
+        if self.tui_session.is_some() {
+            self.shell_display_cwd.clone()
+        } else {
+            env::current_dir()
+                .ok()
+                .and_then(|path| path.to_str().map(ToOwned::to_owned))
+                .unwrap_or_else(|| "cwd: unavailable".to_string())
+        }
     }
 }

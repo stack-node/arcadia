@@ -1,5 +1,7 @@
 //! GPUI shell root view — split across `app/` submodules for readability.
 
+use std::path::PathBuf;
+
 mod entry;
 mod lifecycle;
 mod modules_page;
@@ -78,10 +80,18 @@ pub struct ArcadiaRoot {
     pub shell_caret_task_started: bool,
     pub shell_stream_nonce: u64,
     pub shell_output_scroll: ScrollHandle,
+    /// Keeps the embedded PTY viewport pinned to the prompt line (bottom of the terminal grid).
+    pub tui_scroll: ScrollHandle,
     pub shell_mode: ShellMode,
+    /// Logical cwd for each `sh -c` spawn (persists across commands).
+    pub shell_working_dir: PathBuf,
+    /// Shown in the top bar while a PTY session is active; tracks the foreground shell process cwd.
+    pub shell_display_cwd: String,
     pub tui_session: Option<TuiSession>,
     pub tui_nonce: u64,
     pub tui_ready: bool,
+    pub tui_cols: u16,
+    pub tui_rows: u16,
     pub splash_elapsed_ms: f32,
     pub splash_tick_started: bool,
     pub sidebar_visible: bool,

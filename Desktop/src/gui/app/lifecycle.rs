@@ -1,3 +1,5 @@
+use std::env;
+use std::path::PathBuf;
 use std::time::Duration;
 
 use arcadia_core::config::modules::{ModulesConfig, SHELL_MODULE_NAME, SHELL_MOTD_MODULE_NAME};
@@ -6,6 +8,7 @@ use arcadia_core::modules::shell_motd;
 use arcadia_core::navigation;
 use gpui::{Context, Timer, Window};
 
+use super::super::tui;
 use super::ArcadiaRoot;
 
 impl ArcadiaRoot {
@@ -16,6 +19,22 @@ impl ArcadiaRoot {
         self.shell_cursor = 0;
         self.shell_history_index = None;
         self.shell_output_scroll.scroll_to_bottom();
+        self.sync_shell_display_cwd_from_env();
+    }
+
+    pub(super) fn sync_shell_display_cwd_from_env(&mut self) {
+        match env::current_dir() {
+            Ok(path) => {
+                self.shell_working_dir = path.clone();
+                self.shell_display_cwd = path
+                    .into_os_string()
+                    .into_string()
+                    .unwrap_or_else(|_| "cwd: unavailable".to_string());
+            }
+            Err(_) => {
+                self.shell_display_cwd = "cwd: unavailable".to_string();
+            }
+        }
     }
 
     fn initial_shell_history() -> Vec<String> {
@@ -29,7 +48,9 @@ impl ArcadiaRoot {
             .copied()
             .unwrap_or(false);
         if shell_on && motd_on {
-            shell_motd::motd_lines()
+            let mut lines = shell_motd::motd_lines();
+            lines.push(String::new());
+            lines
         } else {
             vec!["Arcadia Terminal ready.".to_string()]
         }
@@ -40,6 +61,12 @@ impl ArcadiaRoot {
         let module_rows = ModulesConfig::load_or_create()
             .map(|cfg| cfg.modules.into_iter().collect::<Vec<(String, bool)>>())
             .unwrap_or_default();
+        let shell_working_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+        let shell_display_cwd = shell_working_dir
+            .clone()
+            .into_os_string()
+            .into_string()
+            .unwrap_or_else(|_| "cwd: unavailable".to_string());
         ArcadiaRoot {
             title: gpui::SharedString::new_static("Arcadia"),
             active_page_id: navigation::DEFAULT_PAGE_ID,
@@ -56,10 +83,15 @@ impl ArcadiaRoot {
             shell_caret_task_started: false,
             shell_stream_nonce: 0,
             shell_output_scroll: gpui::ScrollHandle::new(),
+            tui_scroll: gpui::ScrollHandle::new(),
             shell_mode: super::ShellMode::Generic,
+            shell_working_dir,
+            shell_display_cwd,
             tui_session: None,
             tui_nonce: 0,
             tui_ready: false,
+            tui_cols: tui::DEFAULT_COLS,
+            tui_rows: tui::DEFAULT_ROWS,
             splash_elapsed_ms: 0.0,
             splash_tick_started: false,
             sidebar_visible: true,

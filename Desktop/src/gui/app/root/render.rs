@@ -14,6 +14,9 @@ impl Render for ArcadiaRoot {
             return self.render_splash();
         }
         self.ensure_shell_caret_task(window, cx);
+        if self.tui_session.is_some() {
+            self.sync_tui_size(window);
+        }
         let is_dark = matches!(
             window.appearance(),
             WindowAppearance::Dark | WindowAppearance::VibrantDark
