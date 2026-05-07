@@ -162,15 +162,17 @@ extension ContentView {
     func runShellCommand() {
         let trimmed = shellCommandInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let args = trimmed.split(separator: " ").map(String.init)
         shellHistory.append("$ \(trimmed)")
+        var parts = trimmed.split(separator: " ").map(String.init)
+        let token = parts.removeFirst()
         let output = executeCommand(
-            token: "shell.execute",
-            args: args,
+            token: token,
+            args: parts,
             context: ExecutionContextFfi(netAs: remoteRoute, netTimeoutMs: nil)
         )
         shellHistory.append(contentsOf: output.split(separator: "\n", omittingEmptySubsequences: false).map(String.init))
         shellHistory.append("")
+        shellCommandInput = ""
     }
 
     func dismissKeyboard() {
